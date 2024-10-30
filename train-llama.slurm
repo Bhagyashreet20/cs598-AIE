@@ -17,6 +17,7 @@ export HF_HOME="/projects/bdof/code/cs598-AIE/custom_hf_cache"
 mkdir -p $HF_HOME
 
 # Load necessary modules
+#adding comments....
 module load gcc
 module load python/3.10.13
 module load cuda/12.4.0

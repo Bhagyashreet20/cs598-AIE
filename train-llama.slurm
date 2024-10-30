@@ -10,8 +10,8 @@
 #SBATCH --gpus-per-task=3
 #SBATCH --time=01:00:00 
 #SBATCH --constraint="scratch"
-#SBATCH --output=/projects/bdof/code/logs/slurm-logs/output/btaleka-train.%j.out
-#SBATCH --error=/projects/bdof/code/logs/slurm-logs/error/btaleka-train.%j.err
+#SBATCH --output=/projects/bdof/code/logs/slurm-logs/output/train.%j.out
+#SBATCH --error=/projects/bdof/code/logs/slurm-logs/error/train.%j.err
 
 export HF_HOME="/projects/bdof/code/cs598-AIE/custom_hf_cache"
 mkdir -p $HF_HOME
@@ -21,13 +21,19 @@ module load gcc
 module load python/3.10.13
 module load cuda/12.4.0
 
+#PLEASE COMMENT THIS: once you create virtual environment otherwise it will keep on creating env again and again
+python3 -m venv myenv 
 
-python3 -m venv myenv     
+
 source /projects/bdof/code/cs598-AIE/myenv/bin/activate  
 
+#PLEASE RUN THESE 3 COMMANDS ONCE AND THEN COMMENT
 pip install torch torchvision torchaudio
 pip install transformers accelerate
 pip install bitsandbytes datasets
+
+
+
 pip install --upgrade torch torchvision transformers accelerate bitsandbytes datasets
 
 export RANK=$SLURM_PROCID

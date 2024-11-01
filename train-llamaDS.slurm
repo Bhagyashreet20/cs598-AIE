@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --mem=160g #cpu memory
+#SBATCH --mem=160g
 #SBATCH --partition=gpuA100x4
 #SBATCH --account=bdof-delta-gpu
 #SBATCH --job-name=train
@@ -17,30 +17,21 @@ export HF_HOME="/projects/bdof/code/cs598-AIE/custom_hf_cache"
 mkdir -p $HF_HOME
 
 # Load necessary modules
-#adding comments....
 module load gcc
 module load python/3.10.13
 module load cuda/12.4.0
 
-#PLEASE COMMENT THIS: once you create virtual environment otherwise it will keep on creating env again and again
-#python3 -m venv myenv 
-
+# Activate virtual environment
 source /projects/bdof/code/cs598-AIE/myenv/bin/activate  
 
-#PLEASE RUN THESE 3 COMMANDS ONCE AND THEN COMMENT
-#pip install torch torchvision torchaudio
-#pip install transformers accelerate
-#pip install bitsandbytes datasets
+# Install requirements
+pip install --upgrade torch torchvision transformers accelerate bitsandbytes datasets deepspeed
 
-pip install --upgrade torch torchvision transformers accelerate bitsandbytes datasets
-
-export RANK=$SLURM_PROCID
-export WORLD_SIZE=$SLURM_NTASKS
-# export RANK=0
-# export WORLD_SIZE=2
 export MASTER_ADDR="localhost"
-export MASTER_PORT="29500"  # Any free port on your system
+export MASTER_PORT="29502"
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 nvidia-smi
-torchrun --nproc_per_node=3 --master_port=$MASTER_PORT train.py
+
+# Launch DeepSpeed with the training script
+deepspeed train.py

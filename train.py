@@ -174,7 +174,7 @@ print_multi_gpu_utilization()
 
 # Save the model
 print("----saving the model--------")
-trainer.save_model('./finetuned_llama_11b')
+trainer.save_model('./finetuned_llama_3b')
 
 # Clean up distributed resources
 

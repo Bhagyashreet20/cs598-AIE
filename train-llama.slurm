@@ -31,8 +31,7 @@ source /projects/bdof/code/cs598-AIE/myenv/bin/activate
 #pip install torch torchvision torchaudio
 #pip install transformers accelerate
 #pip install bitsandbytes datasets
-
-pip install --upgrade torch torchvision transformers accelerate bitsandbytes datasets
+#pip install --upgrade torch torchvision transformers accelerate bitsandbytes datasets
 
 export RANK=$SLURM_PROCID
 export WORLD_SIZE=$SLURM_NTASKS

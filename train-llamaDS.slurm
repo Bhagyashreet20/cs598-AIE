@@ -25,7 +25,7 @@ module load cuda/12.4.0
 source /projects/bdof/code/cs598-AIE/myenv/bin/activate  
 
 # Install requirements
-pip install --upgrade torch torchvision transformers accelerate bitsandbytes datasets deepspeed
+#pip install --upgrade torch torchvision transformers accelerate bitsandbytes datasets deepspeed
 
 export MASTER_ADDR="localhost"
 export MASTER_PORT="29502"
@@ -34,4 +34,4 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 nvidia-smi
 
 # Launch DeepSpeed with the training script
-deepspeed train.py
+deepspeed train-deepspeed.py

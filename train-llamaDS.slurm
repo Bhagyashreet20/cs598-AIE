@@ -28,8 +28,7 @@ source /projects/bdof/code/cs598-AIE/myenv/bin/activate
 #pip install --upgrade torch torchvision transformers accelerate bitsandbytes datasets deepspeed
 
 export MASTER_ADDR="localhost"
-export MASTER_PORT="29502"
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+export MASTER_PORT="29500"
 
 nvidia-smi
 

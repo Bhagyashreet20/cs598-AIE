@@ -145,9 +145,6 @@ training_args = TrainingArguments(
     remove_unused_columns=False,
 )
 
-
-
-
 # FSDP Configuration
 
 # Initialize the Trainer
@@ -158,9 +155,6 @@ trainer = Trainer(
     eval_dataset=tokenized_val_dataset,
    
 )
-
-
-
 
 # Check GPU utilization again before training
 print_multi_gpu_utilization()

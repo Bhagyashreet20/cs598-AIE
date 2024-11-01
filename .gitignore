@@ -167,5 +167,8 @@ output/
 #hf cache
 custom_hf_cache/
 
+#deepspeed cache
+custom_triton_cache/
+
 # virtual env 
 myenv/

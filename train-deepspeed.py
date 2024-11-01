@@ -2,12 +2,10 @@ import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments
 from huggingface_hub import login
 from datasets import load_dataset
-from torch.utils.data import DataLoader
-from torch.utils.data.distributed import DistributedSampler
 import deepspeed
 import os
 
-# Initialize DeepSpeed and login to Hugging Face Hub
+# Login to Hugging Face Hub
 hf_token = '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'
 login(token=hf_token)
 
@@ -21,13 +19,14 @@ if tokenizer.pad_token is None:
 
 model = AutoModelForCausalLM.from_pretrained(
     model_id,
-    torch_dtype=torch.bfloat16  # Use bf16 for better memory efficiency if supported
+    torch_dtype=torch.bfloat16
 )
+model.gradient_checkpointing_enable()
 
 # Initialize DeepSpeed
 ds_config = "ds_config.json"
 
-# Prepare the dataset
+# Prepare the dataset (maybe change)
 dataset = load_dataset('cnn_dailymail', '3.0.0')
 small_dataset = dataset['train'].select(range(5000))
 train_val_split = small_dataset.train_test_split(test_size=0.2)
@@ -58,16 +57,16 @@ def tokenize_function(examples):
 tokenized_train_dataset = train_dataset.map(tokenize_function, batched=True)
 tokenized_val_dataset = validation_dataset.map(tokenize_function, batched=True)
 
-# DeepSpeed Trainer arguments
+# Training arguments with DeepSpeed
 training_args = TrainingArguments(
-    output_dir="./output",
+    output_dir="/projects/bdof/code/models",
     per_device_train_batch_size=1,
     per_device_eval_batch_size=1,
-    num_train_epochs=1,
+    num_train_epochs=5,
     gradient_accumulation_steps=8,
     fp16=True,
-    logging_dir="./logs",
-    deepspeed=ds_config,  # Specify the DeepSpeed config file
+    logging_dir="/projects/bdof/code/logs/deepspeed-logs",
+    deepspeed=ds_config,  # Use DeepSpeed config
     report_to="none",
     remove_unused_columns=False,
 )
@@ -80,8 +79,11 @@ trainer = Trainer(
     eval_dataset=tokenized_val_dataset,
 )
 
-# Train the model
-trainer.train()
-
-# Save the model
-trainer.save_model('./finetuned_llama_3b')
+# Training loop with checkpointing at each epoch
+for epoch in range(training_args.num_train_epochs):
+    print(f"Starting epoch {epoch + 1}")
+    
+    # Train and save checkpoints asynchronously at each epoch
+    trainer.train()
+    trainer.save_checkpoint(f"./output/epoch-{epoch + 1}")
+    print(f"Checkpoint saved for epoch {epoch + 1}")

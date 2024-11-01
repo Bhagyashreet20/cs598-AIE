@@ -4,7 +4,7 @@
         "enabled": true
     },
     "zero_optimization": {
-        "stage": 2,
+        "stage": 3,
         "allgather_partitions": true,
         "reduce_scatter": true,
         "allgather_bucket_size": 5e8,
@@ -13,5 +13,9 @@
     },
     "gradient_accumulation_steps": 8,
     "steps_per_print": 10,
-    "wall_clock_breakdown": true
+    "wall_clock_breakdown": true,
+    "checkpoint": {
+        "async_io": true,
+        "checkpoint_tag_validation": true
+    }
 }

@@ -1,0 +1,24 @@
+Lmod Warning:
+-------------------------------------------------------------------------------
+The following dependent module(s) are not currently loaded: gcc-runtime/8.5.0
+(required by: python/3.10.13)
+-------------------------------------------------------------------------------
+
+
+
+
+The following have been reloaded with a version change:
+  1) cuda/11.8.0 => cuda/12.4.0     2) gcc-runtime/8.5.0 => gcc-runtime/11.4.0
+
+/var/spool/slurmd/job5510070/slurm_script: line 26: source: /projects/bdof/code/cs598-AIE/myenv: is a directory
+ERROR: Ignored the following versions that require a different python version: 0.21.0 Requires-Python >=3.8.0; 0.22.0 Requires-Python >=3.8.0; 0.23.0 Requires-Python >=3.8.0; 0.24.0 Requires-Python >=3.8.0; 0.24.1 Requires-Python >=3.8.0; 0.25.0 Requires-Python >=3.8.0; 0.26.0 Requires-Python >=3.8.0; 0.26.1 Requires-Python >=3.8.0; 0.27.0 Requires-Python >=3.8.0; 0.27.1 Requires-Python >=3.8.0; 0.27.2 Requires-Python >=3.8.0; 0.28.0 Requires-Python >=3.8.0; 0.29.0 Requires-Python >=3.8.0; 0.29.1 Requires-Python >=3.8.0; 0.29.2 Requires-Python >=3.8.0; 0.29.3 Requires-Python >=3.8.0; 0.30.0 Requires-Python >=3.8.0; 0.30.0rc0 Requires-Python >=3.8.0; 0.30.1 Requires-Python >=3.8.0; 0.31.0 Requires-Python >=3.8.0; 0.32.0 Requires-Python >=3.8.0; 0.32.1 Requires-Python >=3.8.0; 0.33.0 Requires-Python >=3.8.0; 0.34.0 Requires-Python >=3.8.0; 0.34.1 Requires-Python >=3.8.0; 0.34.2 Requires-Python >=3.8.0; 1.0.0 Requires-Python >=3.8; 1.0.0 Requires-Python >=3.8.0; 1.0.0rc0 Requires-Python >=3.8.0; 1.0.0rc1 Requires-Python >=3.8.0; 1.0.1 Requires-Python >=3.8; 1.0.1 Requires-Python >=3.8.0; 1.1.0 Requires-Python >=3.9.0; 1.1.1 Requires-Python >=3.9.0; 23.10.0 Requires-Python >=3.8; 23.10.1 Requires-Python >=3.8; 23.11.0 Requires-Python >=3.8; 23.12.0 Requires-Python >=3.8; 23.12.1 Requires-Python >=3.8; 23.7.0 Requires-Python >=3.8; 23.9.0 Requires-Python >=3.8; 23.9.1 Requires-Python >=3.8; 24.1.0 Requires-Python >=3.8; 24.1.1 Requires-Python >=3.8; 24.10.0 Requires-Python >=3.9; 24.1a1 Requires-Python >=3.8; 24.2.0 Requires-Python >=3.8; 24.3.0 Requires-Python >=3.8; 24.4.0 Requires-Python >=3.8; 24.4.1 Requires-Python >=3.8; 24.4.2 Requires-Python >=3.8; 24.8.0 Requires-Python >=3.8
+ERROR: Could not find a version that satisfies the requirement codeshield (from llama-recipes) (from versions: none)
+ERROR: No matching distribution found for codeshield
+Traceback (most recent call last):
+  File "/u/btaleka/.local/bin/torchrun", line 5, in <module>
+    from torch.distributed.run import main
+  File "/u/btaleka/.local/lib/python3.7/site-packages/torch/__init__.py", line 16, in <module>
+    import ctypes
+  File "/sw/external/python/python-3.7.17/lib/python3.7/ctypes/__init__.py", line 7, in <module>
+    from _ctypes import Union, Structure, Array
+ModuleNotFoundError: No module named '_ctypes'

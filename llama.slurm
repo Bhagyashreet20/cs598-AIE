@@ -21,12 +21,8 @@ module load gcc
 module load python/3.10.13
 module load cuda/12.4.0
 
-
 # python3 -m venv myenv     
-source /projects/bdof/code/cs598-AIE/myenv
-
-
-
+source /projects/bdof/code/cs598-AIE/myenv/bin/activate
 
 cd llama-recipes
 pip install -U pip setuptools

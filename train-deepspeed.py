@@ -21,14 +21,13 @@ model = AutoModelForCausalLM.from_pretrained(
     model_id,
     torch_dtype=torch.bfloat16
 )
-model.gradient_checkpointing_enable()
 
 # Initialize DeepSpeed
 ds_config = "ds_config.json"
 
 # Prepare the dataset (maybe change)
 dataset = load_dataset('cnn_dailymail', '3.0.0')
-small_dataset = dataset['train'].select(range(5000))
+small_dataset = dataset['train'].select(range(50)) # change back to 5000
 train_val_split = small_dataset.train_test_split(test_size=0.2)
 train_dataset = train_val_split['train']
 validation_dataset = train_val_split['test']
@@ -60,8 +59,6 @@ tokenized_val_dataset = validation_dataset.map(tokenize_function, batched=True)
 # Training arguments with DeepSpeed
 training_args = TrainingArguments(
     output_dir="/projects/bdof/code/models",
-    per_device_train_batch_size=1,
-    per_device_eval_batch_size=1,
     num_train_epochs=5,
     gradient_accumulation_steps=8,
     fp16=True,
@@ -85,5 +82,5 @@ for epoch in range(training_args.num_train_epochs):
     
     # Train and save checkpoints asynchronously at each epoch
     trainer.train()
-    trainer.save_checkpoint(f"./output/epoch-{epoch + 1}")
+    trainer._save_checkpoint(f"./output/epoch-{epoch + 1}")
     print(f"Checkpoint saved for epoch {epoch + 1}")

@@ -1,52 +1,24 @@
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# ... [existing imports] ...
 import argparse
 import os
 import random
-# import evaluate
 import torch
 from datasets import load_dataset
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
-from transformers import AutoModelForSequenceClassification,AutoModelForCausalLM,AutoTokenizer, get_linear_schedule_with_warmup, set_seed,AutoModelForSeq2SeqLM, LlamaForCausalLM, LlamaTokenizer
-
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    get_linear_schedule_with_warmup,
+    set_seed,
+)
 from accelerate import Accelerator, DataLoaderConfiguration, DistributedType
+from rouge import Rouge  # New import
 
+MAX_GPU_BATCH_SIZE = 4
+EVAL_BATCH_SIZE = 4
 
-########################################################################
-# This is a fully working simple example to use Accelerate
-#
-# This example trains a Bert base model on GLUE MRPC
-# in any of the following settings (with the same script):
-#   - single CPU or single GPU
-#   - multi GPUS (using PyTorch distributed mode)
-#   - (multi) TPUs
-#   - fp16 (mixed-precision) or fp32 (normal precision)
-#
-# This example also demonstrates the checkpointing and sharding capabilities
-#
-# To run it in each of these various modes, follow the instructions
-# in the readme for examples:
-# https://github.com/huggingface/accelerate/tree/main/examples
-#
-########################################################################
-
-
-MAX_GPU_BATCH_SIZE = 16
-EVAL_BATCH_SIZE = 32
-
-model_id="meta-llama/Llama-3.2-3B"
+model_id = "meta-llama/Llama-3.2-3B"
 
 def training_function(config, args):
     # Initialize accelerator
@@ -87,55 +59,44 @@ def training_function(config, args):
         run = os.path.split(__file__)[-1].split(".")[0]
         accelerator.init_trackers(run, config)
 
-
     print("Preparing dataset")
     datasets = load_dataset("cnn_dailymail", "3.0.0")
     # Split train and validation datasets to get subsets directly
-    train_dataset = datasets["train"].train_test_split(train_size=4000, seed=42)["train"]
-    val_dataset = datasets["validation"].train_test_split(test_size=1000, seed=42)["test"]
+    train_dataset = datasets["train"].train_test_split(train_size=100, seed=42)["train"]
+    val_dataset = datasets["validation"].train_test_split(test_size=100, seed=42)["test"]
 
     print(f"Train dataset size: {len(train_dataset)}")
     print(f"Validation dataset size: {len(val_dataset)}")
-    # metric = evaluate.load("rouge")
-    
-    # def tokenize_function(examples):
-    #     # max_length=None => use the model max length (it's actually the default)
-    #     outputs = tokenizer(examples["sentence1"], examples["sentence2"], truncation=True, max_length=None)
-    #     return outputs
 
-       # Define the preprocessing function for summarization
+    # Define the preprocessing function for summarization
     def preprocess_function(examples):
         inputs = examples["article"]
         targets = examples["highlights"]
-        
+
         # Tokenize inputs
         model_inputs = tokenizer(inputs, max_length=512, truncation=True)
-        
+
         # Tokenize targets separately
         labels = tokenizer(targets, max_length=128, truncation=True)
         model_inputs["labels"] = labels["input_ids"]
 
         return model_inputs
 
-
     tokenizer = AutoTokenizer.from_pretrained(model_id)
     # Add a pad token if it doesn't exist
     if tokenizer.pad_token is None:
-    # You can use the eos_token as pad_token if there's no specific pad_token
+        # You can use the eos_token as pad_token if there's no specific pad_token
         tokenizer.add_special_tokens({'pad_token': tokenizer.eos_token})
-    
+    tokenizer.padding_side = "left"
 
     # Apply the method we just defined to all the examples in all the splits of the dataset
-    # starting with the main process first:
-
     with accelerator.main_process_first():
-        tokenized_train_dataset = train_dataset.map(preprocess_function, batched=True, remove_columns=["article", "highlights"])
-        tokenized_val_dataset = val_dataset.map(preprocess_function, batched=True, remove_columns=["article", "highlights"])
-
-
-    # We also rename the 'label' column to 'labels' which is the expected name for labels by the models of the
-    # transformers library
-    # tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
+        tokenized_train_dataset = train_dataset.map(
+            preprocess_function, batched=True, remove_columns=["article", "highlights"]
+        )
+        tokenized_val_dataset = val_dataset.map(
+            preprocess_function, batched=True, remove_columns=["article", "highlights"]
+        )
 
     # If the batch size is too big we use gradient accumulation
     gradient_accumulation_steps = 1
@@ -143,32 +104,12 @@ def training_function(config, args):
         gradient_accumulation_steps = batch_size // MAX_GPU_BATCH_SIZE
         batch_size = MAX_GPU_BATCH_SIZE
 
-   
-    # def collate_fn(examples):
-    #     # Separate input IDs and labels
-    #     inputs = [example["input_ids"] for example in examples]
-    #     labels = [example["labels"] for example in examples]
-
-    #     # Pad inputs and labels
-    #     model_inputs = tokenizer.pad({"input_ids": inputs}, padding="longest", return_tensors="pt")
-    #     labels = tokenizer.pad({"input_ids": labels}, padding="longest", return_tensors="pt")["input_ids"]
-
-    #     # Replace padding token id in labels with -100 to ignore during loss computation
-    #     labels[labels == tokenizer.pad_token_id] = -100
-    #     model_inputs["labels"] = labels
-
-    #     return model_inputs
-    
     def collate_fn(examples):
-        # Set max length for inputs and labels
-        max_length = 512  # or any length that fits within GPU memory constraints
+        max_length = 512
 
-        # Pad inputs and targets
         inputs = [example["input_ids"] for example in examples]
         labels = [example["labels"] for example in examples]
 
-       
-        # Pad inputs
         model_inputs = tokenizer.pad(
             {"input_ids": inputs},
             padding="max_length",
@@ -176,7 +117,8 @@ def training_function(config, args):
             return_tensors="pt",
         )
 
-        # Pad labels to match the input length
+        attention_mask = model_inputs["attention_mask"]
+
         labels = tokenizer.pad(
             {"input_ids": labels},
             padding="max_length",
@@ -184,36 +126,36 @@ def training_function(config, args):
             return_tensors="pt",
         )["input_ids"]
 
-        # Replace padding token id in labels with -100 to ignore in loss calculation
         labels[labels == tokenizer.pad_token_id] = -100
         model_inputs["labels"] = labels
-
-        print("Input shape:", model_inputs["input_ids"].shape)
-        print("Labels shape:", model_inputs["labels"].shape)
+        model_inputs["attention_mask"] = attention_mask
+        # Uncomment the following lines for debugging
+        # print(f"Input IDs shape: {model_inputs['input_ids'].shape}")
+        # print(f"Labels shape: {model_inputs['labels'].shape}")
+        # print(f"Attention mask shape: {model_inputs['attention_mask'].shape}")
 
         return model_inputs
 
-
     train_dataloader = DataLoader(
-        tokenized_train_dataset, shuffle=True, collate_fn=collate_fn, batch_size=config["batch_size"]
+        tokenized_train_dataset, shuffle=True, collate_fn=collate_fn, batch_size=batch_size
     )
     eval_dataloader = DataLoader(
         tokenized_val_dataset, shuffle=False, collate_fn=collate_fn, batch_size=EVAL_BATCH_SIZE
     )
 
-   
-
     set_seed(seed)
 
-    # Instantiate the model (we build the model here so that the seed also control new weights initialization)
-   
-    model = AutoModelForCausalLM.from_pretrained(
-    model_id,
-#    torch_dtype=torch.float16 # Use bf16 for better memory efficiency if supported
-)
-    # We could avoid this line since the accelerator is set with `device_placement=True` (default value).
-    # Note that if you are placing tensors on devices manually, this line absolutely needs to be before the optimizer
-    # creation otherwise training will not work on TPU (`accelerate` will kindly throw an error to make us aware of that).
+    # Instantiate the model
+    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16)
+    print(f"Tokenizer vocab size: {len(tokenizer)}")
+    print(f"Initial model embedding size: {model.get_input_embeddings().weight.size(0)}")
+    model.resize_token_embeddings(len(tokenizer))
+    print(f"Resized model embedding size: {model.get_input_embeddings().weight.size(0)}")
+
+    print(f"Model vocab size: {model.get_input_embeddings().weight.size(0)}")
+    print(f"Tokenizer vocab size: {len(tokenizer)}")
+    assert model.get_input_embeddings().weight.size(0) == len(tokenizer), "Embedding size mismatch!"
+
     model = model.to(accelerator.device)
 
     # Instantiate optimizer
@@ -227,19 +169,17 @@ def training_function(config, args):
     )
 
     # Prepare everything
-    # There is no specific order to remember, we just need to unpack the objects in the same order we gave them to the
-    # prepare method.
-    print("preparing model")
+    print("Preparing model")
+    accelerator.wait_for_everyone()
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
         model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
 
-    # We need to keep track of how many total steps we have iterated over
+    # Keep track of steps and epochs
     overall_step = 0
-    # We also need to keep track of the stating epoch so files are named properly
     starting_epoch = 0
 
-    # Potentially load in the weights and states from a previous save
+    # Resume from checkpoint if specified
     if args.resume_from_checkpoint:
         if args.resume_from_checkpoint is not None or args.resume_from_checkpoint != "":
             accelerator.print(f"Resumed from checkpoint: {args.resume_from_checkpoint}")
@@ -261,7 +201,7 @@ def training_function(config, args):
             starting_epoch = resume_step // len(train_dataloader)
             resume_step -= starting_epoch * len(train_dataloader)
 
-    # Now we train the model
+    # Start training
     print("Start training")
     for epoch in range(starting_epoch, num_epochs):
         model.train()
@@ -275,11 +215,10 @@ def training_function(config, args):
                 active_dataloader = train_dataloader
             overall_step += resume_step
         else:
-            # After the first iteration though, we need to go back to the original dataloader
             active_dataloader = train_dataloader
         for step, batch in enumerate(active_dataloader):
-            # We could avoid this line since we set the accelerator with `device_placement=True`.
-            print(batch["input_ids"].shape, batch["labels"].shape)
+            # Uncomment the following line for debugging
+            # print(batch["input_ids"].shape, batch["labels"].shape)
             # Forward pass with only input_ids and labels for LLaMA
             batch = {k: v.to(accelerator.device) for k, v in batch.items()}
             outputs = model(input_ids=batch["input_ids"], labels=batch["labels"])
@@ -303,71 +242,70 @@ def training_function(config, args):
                         output_dir = os.path.join(args.output_dir, output_dir)
                     accelerator.save_state(output_dir)
 
+        # Evaluation
         model.eval()
-        # for step, batch in enumerate(eval_dataloader):
-        #     # We could avoid this line since we set the accelerator with `device_placement=True`.
-        #     batch.to(accelerator.device)
-        #     with torch.no_grad():
-        #         outputs = model(**batch)
-        #     predictions = outputs.logits.argmax(dim=-1)
-        #     predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
-        #     metric.add_batch(
-        #         predictions=predictions,
-        #         references=references,
-        #     )
         decoded_predictions = []
         decoded_references = []
 
+        # Collect predictions and references
         for step, batch in enumerate(eval_dataloader):
+            # Move batch to device
             batch = {k: v.to(accelerator.device) for k, v in batch.items()}
+
             with torch.no_grad():
-                outputs = model.generate(input_ids=batch["input_ids"], max_new_tokens=128)
+                outputs = model.generate(
+                    input_ids=batch["input_ids"],
+                    attention_mask=batch["attention_mask"],
+                    max_new_tokens=128,
+                    pad_token_id=tokenizer.pad_token_id,
+                    eos_token_id=tokenizer.eos_token_id,
+                    bos_token_id=tokenizer.bos_token_id,
+                )
 
             # Decode predictions
-            decoded_predictions.extend(tokenizer.batch_decode(outputs, skip_special_tokens=True))
+            decoded_preds = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+            decoded_labels = tokenizer.batch_decode(
+                torch.where(batch["labels"] != -100, batch["labels"], tokenizer.pad_token_id),
+                skip_special_tokens=True,
+            )
 
-            # Decode references, filtering out -100
-            labels = batch["labels"]
-            labels = torch.where(labels != -100, labels, tokenizer.pad_token_id)
-            decoded_references.extend(tokenizer.batch_decode(labels, skip_special_tokens=True))
+            decoded_predictions.extend(decoded_preds)
+            decoded_references.extend(decoded_labels)
 
-        # Add decoded predictions and references to the metric
-        # metric.add_batch(predictions=decoded_predictions, references=decoded_references)
+        # Compute ROUGE scores using the `rouge` package
+        if accelerator.is_main_process:
+            rouge = Rouge()
+            scores = rouge.get_scores(decoded_predictions, decoded_references, avg=True)
 
-        # eval_metric = metric.compute()
-        # Use accelerator.print to print only on the main process.
-        #accelerator.print(f"epoch {epoch}:", eval_metric)
-        accelerator.print(f" done : epoch {epoch}:")
-        # if args.with_tracking:
-            # accelerator.log(
-            #     {
-            #         "accuracy": eval_metric["accuracy"],
-            #         "f1": eval_metric["f1"],
-            #         "train_loss": total_loss.item() / len(train_dataloader),
-            #         "epoch": epoch,
-            #     },
-            #     step=epoch,
-            # )
-            # accelerator.log(
-            #         {
-            #             "rouge1": eval_metric["rouge1"],
-            #             "rouge2": eval_metric["rouge2"],
-            #             "rougeL": eval_metric["rougeL"],
-            #             "rougeLsum": eval_metric["rougeLsum"],
-            #             "train_loss": total_loss.item() / len(train_dataloader),
-            #             "epoch": epoch,
-            #         },
-            #         step=epoch,
-            #     )
+            # Print or log the results
+            print(f"ROUGE scores at epoch {epoch}:")
+            for metric, results in scores.items():
+                print(f"{metric}:")
+                for sub_metric in ['p', 'r', 'f']:
+                    print(f"  {sub_metric}: {results[sub_metric]:.4f}")
+            if args.with_tracking:
+                # Prepare results for logging
+                rouge_dict = {f"{metric}_{sub_metric}": results[sub_metric]
+                              for metric, results in scores.items()
+                              for sub_metric in ['p', 'r', 'f']}
+                accelerator.log({"rouge": rouge_dict}, step=overall_step)
+
+            # Optionally, print a few examples
+            for pred, ref in zip(decoded_predictions[:5], decoded_references[:5]):
+                print(f"Prediction: {pred}")
+                print(f"Reference: {ref}")
+                print("-" * 80)
+
+        accelerator.print(f"Finished evaluation for epoch {epoch}.")
 
         if checkpointing_steps == "epoch":
             output_dir = f"epoch_{epoch}"
             if args.output_dir is not None:
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
+
     print("End training")
     accelerator.end_training()
-
 
 def main():
     parser = argparse.ArgumentParser(description="Simple example of training script.")
@@ -413,12 +351,11 @@ def main():
         "--project_dir",
         type=str,
         default="logs",
-        help="Location on where to store experiment tracking logs` and relevent project information",
+        help="Location on where to store experiment tracking logs and relevant project information",
     )
     args = parser.parse_args()
-    config = {"lr": 2e-5, "num_epochs": 1, "seed": 42, "batch_size": 8}
+    config = {"lr": 2e-5, "num_epochs": 1, "seed": 42, "batch_size": 4}
     training_function(config, args)
-
 
 if __name__ == "__main__":
     main()

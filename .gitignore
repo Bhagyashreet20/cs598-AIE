@@ -167,7 +167,7 @@ logs/error
 accelerate_variants/examples/checkpoints
 accelerate_variants/examples/training-logs/summarization-llama
 accelerate_variants/examples/wandb
-
+accelerate_variants/examples/logs
 #hf cache
 custom_hf_cache/
 

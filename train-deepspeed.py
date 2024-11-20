@@ -21,51 +21,59 @@ model = AutoModelForCausalLM.from_pretrained(
     model_id,
     torch_dtype=torch.bfloat16
 )
+model.gradient_checkpointing_enable()
 
 # Initialize DeepSpeed
 ds_config = "ds_config.json"
 
-# Prepare the dataset (maybe change)
+# Prepare the dataset 
 dataset = load_dataset('cnn_dailymail', '3.0.0')
-small_dataset = dataset['train'].select(range(50)) # change back to 5000
-train_val_split = small_dataset.train_test_split(test_size=0.2)
+small_dataset = dataset['train'].select(range(5000))
+train_val_split = small_dataset.train_test_split(test_size=0.1)
 train_dataset = train_val_split['train']
 validation_dataset = train_val_split['test']
 
 # Tokenization
 def tokenize_function(examples):
     inputs = tokenizer(
-        examples["article"], 
+        examples["article"],
         return_tensors="pt", 
         truncation=True, 
         padding="max_length", 
-        max_length=1024
+        max_length=512
     )
     labels = tokenizer(
-        examples["highlights"], 
+        examples["highlights"],
         return_tensors="pt", 
         truncation=True, 
         padding="max_length", 
-        max_length=1024
+        max_length=512
     )
     labels["input_ids"] = torch.roll(labels["input_ids"], shifts=-1, dims=-1)
     labels["input_ids"][:, -1] = tokenizer.pad_token_id
-    inputs["labels"] = labels["input_ids"]
-    return inputs
+    
+    # Convert tensors to lists for compatibility with datasets.map
+    return {
+        "input_ids": inputs["input_ids"].tolist(),
+        "attention_mask": inputs["attention_mask"].tolist(),
+        "labels": labels["input_ids"].tolist(),
+    }
 
 tokenized_train_dataset = train_dataset.map(tokenize_function, batched=True)
 tokenized_val_dataset = validation_dataset.map(tokenize_function, batched=True)
 
 # Training arguments with DeepSpeed
 training_args = TrainingArguments(
-    output_dir="/projects/bdof/code/models",
-    num_train_epochs=5,
-    gradient_accumulation_steps=8,
+    output_dir="/projects/bdof/nkanamarla/models",
+    num_train_epochs=1,
+    save_steps=1,  # Save a checkpoint at every step
     fp16=True,
     logging_dir="/projects/bdof/code/logs/deepspeed-logs",
     deepspeed=ds_config,  # Use DeepSpeed config
     report_to="none",
     remove_unused_columns=False,
+    save_strategy="epoch",
+    evaluation_strategy="epoch"
 )
 
 # Initialize Trainer with DeepSpeed
@@ -79,8 +87,6 @@ trainer = Trainer(
 # Training loop with checkpointing at each epoch
 for epoch in range(training_args.num_train_epochs):
     print(f"Starting epoch {epoch + 1}")
-    
-    # Train and save checkpoints asynchronously at each epoch
     trainer.train()
-    trainer._save_checkpoint(f"./output/epoch-{epoch + 1}")
-    print(f"Checkpoint saved for epoch {epoch + 1}")
+    print(f"Finished epoch {epoch + 1}")
+

@@ -14,11 +14,21 @@ from transformers import (
 )
 from accelerate import Accelerator, DataLoaderConfiguration, DistributedType
 from rouge import Rouge  # New import
+from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
+
+from torch.profiler import profile, record_function, ProfilerActivity
+
 
 MAX_GPU_BATCH_SIZE = 4
 EVAL_BATCH_SIZE = 4
 
 model_id = "meta-llama/Llama-3.2-3B"
+
+
+
+
+
+
 
 def training_function(config, args):
     # Initialize accelerator
@@ -62,8 +72,8 @@ def training_function(config, args):
     print("Preparing dataset")
     datasets = load_dataset("cnn_dailymail", "3.0.0")
     # Split train and validation datasets to get subsets directly
-    train_dataset = datasets["train"].train_test_split(train_size=100, seed=42)["train"]
-    val_dataset = datasets["validation"].train_test_split(test_size=100, seed=42)["test"]
+    train_dataset = datasets["train"].train_test_split(train_size=50, seed=42)["train"]
+    val_dataset = datasets["validation"].train_test_split(test_size=10, seed=42)["test"]
 
     print(f"Train dataset size: {len(train_dataset)}")
     print(f"Validation dataset size: {len(val_dataset)}")
@@ -77,7 +87,7 @@ def training_function(config, args):
         model_inputs = tokenizer(inputs, max_length=512, truncation=True)
 
         # Tokenize targets separately
-        labels = tokenizer(targets, max_length=128, truncation=True)
+        labels = tokenizer(targets, max_length=512, truncation=True)
         model_inputs["labels"] = labels["input_ids"]
 
         return model_inputs
@@ -130,10 +140,7 @@ def training_function(config, args):
         model_inputs["labels"] = labels
         model_inputs["attention_mask"] = attention_mask
         # Uncomment the following lines for debugging
-        # print(f"Input IDs shape: {model_inputs['input_ids'].shape}")
-        # print(f"Labels shape: {model_inputs['labels'].shape}")
-        # print(f"Attention mask shape: {model_inputs['attention_mask'].shape}")
-
+      
         return model_inputs
 
     train_dataloader = DataLoader(
@@ -147,15 +154,10 @@ def training_function(config, args):
 
     # Instantiate the model
     model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16)
-    print(f"Tokenizer vocab size: {len(tokenizer)}")
-    print(f"Initial model embedding size: {model.get_input_embeddings().weight.size(0)}")
-    model.resize_token_embeddings(len(tokenizer))
-    print(f"Resized model embedding size: {model.get_input_embeddings().weight.size(0)}")
-
-    print(f"Model vocab size: {model.get_input_embeddings().weight.size(0)}")
-    print(f"Tokenizer vocab size: {len(tokenizer)}")
-    assert model.get_input_embeddings().weight.size(0) == len(tokenizer), "Embedding size mismatch!"
-
+    # Ensure the embedding layer matches the tokenizer vocab size
+   
+   
+ 
     model = model.to(accelerator.device)
 
     # Instantiate optimizer
@@ -170,11 +172,15 @@ def training_function(config, args):
 
     # Prepare everything
     print("Preparing model")
+    vocab_size, hidden_size = model.get_input_embeddings().weight.size()
+
     accelerator.wait_for_everyone()
+  
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
         model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
-
+    
+  
     # Keep track of steps and epochs
     overall_step = 0
     starting_epoch = 0
@@ -204,6 +210,9 @@ def training_function(config, args):
     # Start training
     print("Start training")
     for epoch in range(starting_epoch, num_epochs):
+        
+        # model = fix_flattened_embedding(model, vocab_size=vocab_size, hidden_size=hidden_size)
+       
         model.train()
         if args.with_tracking:
             total_loss = 0
@@ -217,92 +226,120 @@ def training_function(config, args):
         else:
             active_dataloader = train_dataloader
         for step, batch in enumerate(active_dataloader):
-            # Uncomment the following line for debugging
-            # print(batch["input_ids"].shape, batch["labels"].shape)
-            # Forward pass with only input_ids and labels for LLaMA
-            batch = {k: v.to(accelerator.device) for k, v in batch.items()}
-            outputs = model(input_ids=batch["input_ids"], labels=batch["labels"])
-            loss = outputs.loss
-            loss = loss / gradient_accumulation_steps
-            # We keep track of the loss at each epoch
-            if args.with_tracking:
-                total_loss += loss.detach().float()
-            accelerator.backward(loss)
-            if step % gradient_accumulation_steps == 0:
-                optimizer.step()
-                lr_scheduler.step()
-                optimizer.zero_grad()
+            
+    
+            with profile(
+                activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+                on_trace_ready=torch.profiler.tensorboard_trace_handler('./logs/tensrboard-logs'),
+                # on_trace_ready=lambda p: p.export_chrome_trace("./logs/profiler_trace.json"),
+                record_shapes=True,
+                with_stack=True,
+                profile_memory=True,
+            ) as prof:
+                    with record_function("Training Step"):
+                        batch = {k: v.to(accelerator.device) for k, v in batch.items()}
+                        outputs = model(input_ids=batch["input_ids"], labels=batch["labels"])
+                        # outputs = model(**batch)
+                        loss = outputs.loss
+                        loss = loss / gradient_accumulation_steps
+                        # We keep track of the loss at each epoch
+                        if args.with_tracking:
+                            total_loss += loss.detach().float()
+                        accelerator.backward(loss)
+                        if step % gradient_accumulation_steps == 0:
+                            optimizer.step()
+                            lr_scheduler.step()
+                            optimizer.zero_grad()
 
-            overall_step += 1
+                        overall_step += 1
+            
+            if step % 50 == 0:
+                print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
 
-            if isinstance(checkpointing_steps, int):
-                output_dir = f"step_{overall_step}"
-                if overall_step % checkpointing_steps == 0:
-                    if args.output_dir is not None:
-                        output_dir = os.path.join(args.output_dir, output_dir)
-                    accelerator.save_state(output_dir)
+           
+       
+
+            with record_function("Checkpointing"):
+                if isinstance(checkpointing_steps, int):
+                    output_dir = f"step_{overall_step}"
+                    if overall_step % checkpointing_steps == 0:
+                        if args.output_dir is not None:
+                            output_dir = os.path.join(args.output_dir, output_dir)
+                        accelerator.save_state(output_dir)
 
         # Evaluation
-        model.eval()
-        decoded_predictions = []
-        decoded_references = []
+        # Gather full model state
+      
+        # model.eval()
+        # decoded_predictions = []
+        # decoded_references = []
+       
+        # # Collect predictions and references
+        # for step, batch in enumerate(eval_dataloader):
+        #     # model = fix_flattened_embedding(model, vocab_size=vocab_size, hidden_size=hidden_size)
+        #     # Move batch to device
+        #     batch = {k: v.to(accelerator.device) for k, v in batch.items()}
+        #     # Access the embedding layer
+        #     embed_tokens = model.get_submodule("model.embed_tokens")
+   
+        #     # Ensure input IDs are valid
+        #     assert batch["input_ids"].max() < embed_tokens.weight.size(0),"Input IDs exceed embedding vocab size!"
 
-        # Collect predictions and references
-        for step, batch in enumerate(eval_dataloader):
-            # Move batch to device
-            batch = {k: v.to(accelerator.device) for k, v in batch.items()}
+        #     with torch.no_grad():
+                
+               
+        #         outputs = model.generate(
+        #             input_ids=batch["input_ids"],
+        #             attention_mask=batch["attention_mask"],
+        #             max_new_tokens=128,  # Number of tokens to generate
+        #             num_beams=4,
+        #             early_stopping=True,
+                    
+        #         )
+              
 
-            with torch.no_grad():
-                outputs = model.generate(
-                    input_ids=batch["input_ids"],
-                    attention_mask=batch["attention_mask"],
-                    max_new_tokens=128,
-                    pad_token_id=tokenizer.pad_token_id,
-                    eos_token_id=tokenizer.eos_token_id,
-                    bos_token_id=tokenizer.bos_token_id,
-                )
+        #     # Decode predictions
+        #     decoded_preds = tokenizer.batch_decode(outputs, skip_special_tokens=True)
+        #     decoded_labels = tokenizer.batch_decode(
+        #         torch.where(batch["labels"] != -100, batch["labels"], tokenizer.pad_token_id),
+        #         skip_special_tokens=True,
+        #     )
 
-            # Decode predictions
-            decoded_preds = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-            decoded_labels = tokenizer.batch_decode(
-                torch.where(batch["labels"] != -100, batch["labels"], tokenizer.pad_token_id),
-                skip_special_tokens=True,
-            )
-
-            decoded_predictions.extend(decoded_preds)
-            decoded_references.extend(decoded_labels)
+        #     decoded_predictions.extend(decoded_preds)
+        #     decoded_references.extend(decoded_labels)
+        #     print('done eval')
 
         # Compute ROUGE scores using the `rouge` package
-        if accelerator.is_main_process:
-            rouge = Rouge()
-            scores = rouge.get_scores(decoded_predictions, decoded_references, avg=True)
+        # if accelerator.is_main_process:
+        #     rouge = Rouge()
+        #     scores = rouge.get_scores(decoded_predictions, decoded_references, avg=True)
 
-            # Print or log the results
-            print(f"ROUGE scores at epoch {epoch}:")
-            for metric, results in scores.items():
-                print(f"{metric}:")
-                for sub_metric in ['p', 'r', 'f']:
-                    print(f"  {sub_metric}: {results[sub_metric]:.4f}")
-            if args.with_tracking:
-                # Prepare results for logging
-                rouge_dict = {f"{metric}_{sub_metric}": results[sub_metric]
-                              for metric, results in scores.items()
-                              for sub_metric in ['p', 'r', 'f']}
-                accelerator.log({"rouge": rouge_dict}, step=overall_step)
+        #     # Print or log the results
+        #     print(f"ROUGE scores at epoch {epoch}:")
+        #     for metric, results in scores.items():
+        #         print(f"{metric}:")
+        #         for sub_metric in ['p', 'r', 'f']:
+        #             print(f"  {sub_metric}: {results[sub_metric]:.4f}")
+        #     if args.with_tracking:
+        #         # Prepare results for logging
+        #         rouge_dict = {f"{metric}_{sub_metric}": results[sub_metric]
+        #                       for metric, results in scores.items()
+        #                       for sub_metric in ['p', 'r', 'f']}
+        #         accelerator.log({"rouge": rouge_dict}, step=overall_step)
 
-            # Optionally, print a few examples
-            for pred, ref in zip(decoded_predictions[:5], decoded_references[:5]):
-                print(f"Prediction: {pred}")
-                print(f"Reference: {ref}")
-                print("-" * 80)
+        #     # Optionally, print a few examples
+        #     for pred, ref in zip(decoded_predictions[:5], decoded_references[:5]):
+        #         print(f"Prediction: {pred}")
+        #         print(f"Reference: {ref}")
+        #         print("-" * 80)
 
-        accelerator.print(f"Finished evaluation for epoch {epoch}.")
-
-        if checkpointing_steps == "epoch":
-            output_dir = f"epoch_{epoch}"
-            if args.output_dir is not None:
-                output_dir = os.path.join(args.output_dir, output_dir)
-            accelerator.save_state(output_dir)
+        # accelerator.print(f"Finished evaluation for epoch {epoch}.")
+        with record_function("Checkpointing"):
+            if checkpointing_steps == "epoch":
+                output_dir = f"epoch_{epoch}"
+                if args.output_dir is not None:
+                    output_dir = os.path.join(args.output_dir, output_dir)
+                accelerator.save_state(output_dir)
 
     print("End training")
     accelerator.end_training()
@@ -312,7 +349,7 @@ def main():
     parser.add_argument(
         "--mixed_precision",
         type=str,
-        default=None,
+        default="no",
         choices=["no", "fp16", "bf16", "fp8"],
         help="Whether to use mixed precision. Choose"
         "between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >= 1.10."

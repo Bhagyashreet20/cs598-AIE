@@ -39,7 +39,6 @@ accelerate launch --num_processes 2 --config_file /projects/bdof/code/cs598-AIE/
     summarization-llama.py \
     --checkpointing_steps 2 \
     --use_stateful_dataloader \
-    --with_tracking \
     --output_dir ./checkpoints \
-    --project_dir ./training-logs
+
 

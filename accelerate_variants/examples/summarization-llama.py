@@ -17,7 +17,7 @@ from rouge import Rouge  # New import
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
 from torch.profiler import profile, record_function, ProfilerActivity
-
+import time
 
 MAX_GPU_BATCH_SIZE = 4
 EVAL_BATCH_SIZE = 4
@@ -179,7 +179,6 @@ def training_function(config, args):
     model, optimizer, train_dataloader, eval_dataloader, lr_scheduler = accelerator.prepare(
         model, optimizer, train_dataloader, eval_dataloader, lr_scheduler
     )
-    
   
     # Keep track of steps and epochs
     overall_step = 0
@@ -209,6 +208,8 @@ def training_function(config, args):
 
     # Start training
     print("Start training")
+    total_samples = 0
+    train_start_time = time.time()
     for epoch in range(starting_epoch, num_epochs):
         
         # model = fix_flattened_embedding(model, vocab_size=vocab_size, hidden_size=hidden_size)
@@ -225,124 +226,83 @@ def training_function(config, args):
             overall_step += resume_step
         else:
             active_dataloader = train_dataloader
-        for step, batch in enumerate(active_dataloader):
-            
-    
+        if epoch == 0:
             with profile(
-                activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-                on_trace_ready=torch.profiler.tensorboard_trace_handler('./logs/tensrboard-logs'),
-                # on_trace_ready=lambda p: p.export_chrome_trace("./logs/profiler_trace.json"),
-                record_shapes=True,
-                with_stack=True,
-                profile_memory=True,
-            ) as prof:
-                    with record_function("Training Step"):
-                        batch = {k: v.to(accelerator.device) for k, v in batch.items()}
-                        outputs = model(input_ids=batch["input_ids"], labels=batch["labels"])
-                        # outputs = model(**batch)
-                        loss = outputs.loss
-                        loss = loss / gradient_accumulation_steps
-                        # We keep track of the loss at each epoch
-                        if args.with_tracking:
-                            total_loss += loss.detach().float()
-                        accelerator.backward(loss)
-                        if step % gradient_accumulation_steps == 0:
-                            optimizer.step()
-                            lr_scheduler.step()
-                            optimizer.zero_grad()
-
-                        overall_step += 1
-            
-            if step % 50 == 0:
-                print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
-
-           
-       
-
-            with record_function("Checkpointing"):
-                if isinstance(checkpointing_steps, int):
-                    output_dir = f"step_{overall_step}"
-                    if overall_step % checkpointing_steps == 0:
-                        if args.output_dir is not None:
-                            output_dir = os.path.join(args.output_dir, output_dir)
-                        accelerator.save_state(output_dir)
-
-        # Evaluation
-        # Gather full model state
-      
-        # model.eval()
-        # decoded_predictions = []
-        # decoded_references = []
-       
-        # # Collect predictions and references
-        # for step, batch in enumerate(eval_dataloader):
-        #     # model = fix_flattened_embedding(model, vocab_size=vocab_size, hidden_size=hidden_size)
-        #     # Move batch to device
-        #     batch = {k: v.to(accelerator.device) for k, v in batch.items()}
-        #     # Access the embedding layer
-        #     embed_tokens = model.get_submodule("model.embed_tokens")
-   
-        #     # Ensure input IDs are valid
-        #     assert batch["input_ids"].max() < embed_tokens.weight.size(0),"Input IDs exceed embedding vocab size!"
-
-        #     with torch.no_grad():
+                    activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
+                    on_trace_ready=torch.profiler.tensorboard_trace_handler('./logs/tensorboard-logs'),
+                    # on_trace_ready=lambda p: p.export_chrome_trace("./logs/profiler_trace.json"),
+                    record_shapes=True,
+                    with_stack=True,
+                    profile_memory=True,
+                ) as prof:
+                        
+                        for step, batch in enumerate(active_dataloader):
                 
-               
-        #         outputs = model.generate(
-        #             input_ids=batch["input_ids"],
-        #             attention_mask=batch["attention_mask"],
-        #             max_new_tokens=128,  # Number of tokens to generate
-        #             num_beams=4,
-        #             early_stopping=True,
+        
+    
+                            with record_function("Training Step"):
+                                batch = {k: v.to(accelerator.device) for k, v in batch.items()}
+                                outputs = model(input_ids=batch["input_ids"], labels=batch["labels"])
+                                # outputs = model(**batch)
+                                loss = outputs.loss
+                                loss = loss / gradient_accumulation_steps
+                                # We keep track of the loss at each epoch
+                                if args.with_tracking:
+                                    total_loss += loss.detach().float()
+                                accelerator.backward(loss)
+                                if step % gradient_accumulation_steps == 0:
+                                    optimizer.step()
+                                    lr_scheduler.step()
+                                    optimizer.zero_grad()
+                               
+                                total_samples += batch["input_ids"].size(0)
+
+                                overall_step += 1
+
+                                prof.step()
+
+                                if step % 2== 0:
+                                    print("debug print of profiling")
+                                    print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+
                     
-        #         )
-              
+                                if isinstance(checkpointing_steps, int):
+                                    output_dir = f"step_{overall_step}"
+                                    if overall_step % checkpointing_steps == 0:
+                                        if args.output_dir is not None:
+                                            output_dir = os.path.join(args.output_dir, output_dir)
+                                        start_ckpt = time.time()
+                                        with record_function("Checkpointing"):
+                                            accelerator.save_state(output_dir)
+                                        end_ckpt = time.time()
+                                        print(f"Checkpointing took {end_ckpt - start_ckpt:.4f} seconds")
+                                        print("--profiling results--")   
+                                        print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+                                     
 
-        #     # Decode predictions
-        #     decoded_preds = tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        #     decoded_labels = tokenizer.batch_decode(
-        #         torch.where(batch["labels"] != -100, batch["labels"], tokenizer.pad_token_id),
-        #         skip_special_tokens=True,
-        #     )
 
-        #     decoded_predictions.extend(decoded_preds)
-        #     decoded_references.extend(decoded_labels)
-        #     print('done eval')
+            #TODO:Eval code should go here
+            # accelerator.print(f"Finished evaluation for epoch {epoch}.")
+        
+                        if checkpointing_steps == "epoch":
+                            output_dir = f"epoch_{epoch}"
+                            if args.output_dir is not None:
+                                output_dir = os.path.join(args.output_dir, output_dir)
+                            start_ckpt = time.time()
+                            with record_function("Checkpointing"):
+                                accelerator.save_state(output_dir)
+                            end_ckpt = time.time()
+                            print(f"Checkpointing took {end_ckpt - start_ckpt:.4f} seconds")
 
-        # Compute ROUGE scores using the `rouge` package
-        # if accelerator.is_main_process:
-        #     rouge = Rouge()
-        #     scores = rouge.get_scores(decoded_predictions, decoded_references, avg=True)
-
-        #     # Print or log the results
-        #     print(f"ROUGE scores at epoch {epoch}:")
-        #     for metric, results in scores.items():
-        #         print(f"{metric}:")
-        #         for sub_metric in ['p', 'r', 'f']:
-        #             print(f"  {sub_metric}: {results[sub_metric]:.4f}")
-        #     if args.with_tracking:
-        #         # Prepare results for logging
-        #         rouge_dict = {f"{metric}_{sub_metric}": results[sub_metric]
-        #                       for metric, results in scores.items()
-        #                       for sub_metric in ['p', 'r', 'f']}
-        #         accelerator.log({"rouge": rouge_dict}, step=overall_step)
-
-        #     # Optionally, print a few examples
-        #     for pred, ref in zip(decoded_predictions[:5], decoded_references[:5]):
-        #         print(f"Prediction: {pred}")
-        #         print(f"Reference: {ref}")
-        #         print("-" * 80)
-
-        # accelerator.print(f"Finished evaluation for epoch {epoch}.")
-        with record_function("Checkpointing"):
-            if checkpointing_steps == "epoch":
-                output_dir = f"epoch_{epoch}"
-                if args.output_dir is not None:
-                    output_dir = os.path.join(args.output_dir, output_dir)
-                accelerator.save_state(output_dir)
-
+                            print("--profiling results--")   
+                        
+                        print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+                            
     print("End training")
     accelerator.end_training()
+    total_training_time = time.time() - train_start_time
+    throughput = total_samples / total_training_time
+    print(f"Throughput: {throughput:.2f} samples/second")
 
 def main():
     parser = argparse.ArgumentParser(description="Simple example of training script.")
@@ -387,7 +347,7 @@ def main():
     parser.add_argument(
         "--project_dir",
         type=str,
-        default="logs",
+        default="./logs/training-logs",
         help="Location on where to store experiment tracking logs and relevant project information",
     )
     args = parser.parse_args()

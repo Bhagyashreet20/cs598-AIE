@@ -31,6 +31,7 @@ source /projects/bdof/code/cs598-AIE/myenv/bin/activate
 # Profiling 
 export TRANSFORMERS_VERBOSITY=debug
 export DEEPSPEED_LOG_LEVEL=debug
+export WANDB_DISABLED=true
 
 # Install requirements 
 #pip install --upgrade torch torchvision transformers accelerate bitsandbytes datasets deepspeed
@@ -41,5 +42,5 @@ export MASTER_PORT=$(python -c "import socket; s=socket.socket(); s.bind(('', 0)
 nvidia-smi
 
 # Launch DeepSpeed with the training script
-deepspeed train-deepspeed.py > /projects/bdof/nkanamarla/logs/train_full.%j.log 2>&1
+deepspeed train-deepspeed.py 
 

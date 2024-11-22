@@ -5,7 +5,8 @@ from datasets import load_dataset
 import deepspeed
 import os
 
-# Login to Hugging Face Hub
+
+# Login to Hugging Face Hub and Weights and Biases
 hf_token = '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'
 login(token=hf_token)
 

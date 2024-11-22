@@ -260,9 +260,9 @@ def training_function(config, args):
 
                         
 
-                    if step % 2== 0:
-                        print("debug print of profiling")
-                        print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+                    # if step % 2== 0:
+                    #     print("debug print of profiling")
+                    #     print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
 
                     
                     if isinstance(checkpointing_steps, int):

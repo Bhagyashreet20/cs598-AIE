@@ -226,66 +226,48 @@ def training_function(config, args):
             overall_step += resume_step
         else:
             active_dataloader = train_dataloader
-        if epoch == 0:
-            with profile(
+
+   
+                        
+            for step, batch in enumerate(active_dataloader):
+                    with profile(
                     activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-                    on_trace_ready=torch.profiler.tensorboard_trace_handler('./logs/tensorboard-logs'),
+                    on_trace_ready=torch.profiler.tensorboard_trace_handler('./logs/tensorboard-logs/step'),
                     # on_trace_ready=lambda p: p.export_chrome_trace("./logs/profiler_trace.json"),
                     record_shapes=True,
                     with_stack=True,
                     profile_memory=True,
-                ) as prof:
+                    ) as prof:
+                            print("step level profiling is turned on!!")
+                            
+                            batch = {k: v.to(accelerator.device) for k, v in batch.items()}
+                            outputs = model(input_ids=batch["input_ids"], labels=batch["labels"])
+                            # outputs = model(**batch)
+                            loss = outputs.loss
+                            loss = loss / gradient_accumulation_steps
+                            # We keep track of the loss at each epoch
+                            if args.with_tracking:
+                                total_loss += loss.detach().float()
+                            accelerator.backward(loss)
+                            if step % gradient_accumulation_steps == 0:
+                                optimizer.step()
+                                lr_scheduler.step()
+                                optimizer.zero_grad()
+                            
+                            total_samples += batch["input_ids"].size(0)
+
+                            overall_step += 1
+
                         
-                        for step, batch in enumerate(active_dataloader):
-                
-        
-    
-                            with record_function("Training Step"):
-                                batch = {k: v.to(accelerator.device) for k, v in batch.items()}
-                                outputs = model(input_ids=batch["input_ids"], labels=batch["labels"])
-                                # outputs = model(**batch)
-                                loss = outputs.loss
-                                loss = loss / gradient_accumulation_steps
-                                # We keep track of the loss at each epoch
-                                if args.with_tracking:
-                                    total_loss += loss.detach().float()
-                                accelerator.backward(loss)
-                                if step % gradient_accumulation_steps == 0:
-                                    optimizer.step()
-                                    lr_scheduler.step()
-                                    optimizer.zero_grad()
-                               
-                                total_samples += batch["input_ids"].size(0)
 
-                                overall_step += 1
-
-                                prof.step()
-
-                                if step % 2== 0:
-                                    print("debug print of profiling")
-                                    print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+                    if step % 2== 0:
+                        print("debug print of profiling")
+                        print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
 
                     
-                                if isinstance(checkpointing_steps, int):
-                                    output_dir = f"step_{overall_step}"
-                                    if overall_step % checkpointing_steps == 0:
-                                        if args.output_dir is not None:
-                                            output_dir = os.path.join(args.output_dir, output_dir)
-                                        start_ckpt = time.time()
-                                        with record_function("Checkpointing"):
-                                            accelerator.save_state(output_dir)
-                                        end_ckpt = time.time()
-                                        print(f"Checkpointing took {end_ckpt - start_ckpt:.4f} seconds")
-                                        print("--profiling results--")   
-                                        print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
-                                     
-
-
-            #TODO:Eval code should go here
-            # accelerator.print(f"Finished evaluation for epoch {epoch}.")
-        
-                        if checkpointing_steps == "epoch":
-                            output_dir = f"epoch_{epoch}"
+                    if isinstance(checkpointing_steps, int):
+                        output_dir = f"step_{overall_step}"
+                        if overall_step % checkpointing_steps == 0:
                             if args.output_dir is not None:
                                 output_dir = os.path.join(args.output_dir, output_dir)
                             start_ckpt = time.time()
@@ -293,10 +275,25 @@ def training_function(config, args):
                                 accelerator.save_state(output_dir)
                             end_ckpt = time.time()
                             print(f"Checkpointing took {end_ckpt - start_ckpt:.4f} seconds")
-
                             print("--profiling results--")   
-                        
-                        print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+                            print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+                                     
+
+
+ 
+        
+            if checkpointing_steps == "epoch":
+                    print("epoch level profiling is turned on!!")
+            
+                    output_dir = f"epoch_{epoch}"
+                    if args.output_dir is not None:
+                        output_dir = os.path.join(args.output_dir, output_dir)
+                    start_ckpt = time.time()
+                    accelerator.save_state(output_dir)
+                    end_ckpt = time.time()
+                    print(f"Checkpointing took {end_ckpt - start_ckpt:.4f} seconds")
+                    print("--Profiling results for epoch--")
+                    
                             
     print("End training")
     accelerator.end_training()

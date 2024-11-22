@@ -1,16 +1,16 @@
 #!/bin/bash
 
-#SBATCH --mem=200g 
-#SBATCH --partition=gpuA100x8
+#SBATCH --mem=128g 
+#SBATCH --partition=gpuA100x4
 #SBATCH --account=bdof-delta-gpu
 #SBATCH --job-name=train
-#SBATCH --cpus-per-gpu=16
+#SBATCH --cpus-per-gpu=8
 #SBATCH --nodes=1
-#SBATCH --gpus=4
+#SBATCH --gpus=2
 #SBATCH --ntasks=1
-#SBATCH --gpus-per-node=4
-#SBATCH --gpus-per-task=4
-#SBATCH --time=03:00:00 
+#SBATCH --gpus-per-node=2
+#SBATCH --gpus-per-task=2
+#SBATCH --time=01:00:00 
 #SBATCH --constraint="scratch"
 #SBATCH --output=/projects/bdof/nkanamarla/logs/output/train.%j.out
 #SBATCH --error=/projects/bdof/nkanamarla/logs/error/train.%j.err
@@ -28,6 +28,10 @@ module load cuda/11.8.0   # Updated CUDA version
 # Activate virtual environment
 source /projects/bdof/code/cs598-AIE/myenv/bin/activate  
 
+# Profiling 
+export TRANSFORMERS_VERBOSITY=debug
+export DEEPSPEED_LOG_LEVEL=debug
+
 # Install requirements 
 #pip install --upgrade torch torchvision transformers accelerate bitsandbytes datasets deepspeed
 
@@ -37,4 +41,5 @@ export MASTER_PORT=$(python -c "import socket; s=socket.socket(); s.bind(('', 0)
 nvidia-smi
 
 # Launch DeepSpeed with the training script
-deepspeed train-deepspeed.py
+deepspeed train-deepspeed.py > /projects/bdof/nkanamarla/logs/train_full.%j.log 2>&1
+

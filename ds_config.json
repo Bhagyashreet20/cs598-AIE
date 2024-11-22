@@ -15,12 +15,15 @@
     "activation_checkpointing": {
         "partition_activations": true,
         "contiguous_memory_optimization": true,
-        "cpu_checkpointing": false
+        "cpu_checkpointing": true
     },
     "checkpoint": {
         "async_io": true,
         "checkpoint_tag_validation": true,
-        "save_checkpoint_activations": true
+        "save_checkpoint_activations": true,
+        "save_debug_info": true, 
+        "enable_profiling": true,
+        "save_total_limit": 10 
     },
     "steps_per_print": 10,
     "wall_clock_breakdown": true,

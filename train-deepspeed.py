@@ -1,10 +1,10 @@
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments
+from transformers import AutoTokenizer, AutoModelForCausalLM, Trainer, TrainingArguments, TrainerCallback
 from huggingface_hub import login
 from datasets import load_dataset
 import deepspeed
 import os
-
+import time
 
 # Login to Hugging Face Hub and Weights and Biases
 hf_token = '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'
@@ -52,7 +52,7 @@ def tokenize_function(examples):
     )
     labels["input_ids"] = torch.roll(labels["input_ids"], shifts=-1, dims=-1)
     labels["input_ids"][:, -1] = tokenizer.pad_token_id
-    
+
     # Convert tensors to lists for compatibility with datasets.map
     return {
         "input_ids": inputs["input_ids"].tolist(),
@@ -67,7 +67,8 @@ tokenized_val_dataset = validation_dataset.map(tokenize_function, batched=True)
 training_args = TrainingArguments(
     output_dir="/work/hdd/bdof/nkanamarla/models",
     num_train_epochs=1,
-    save_steps=10,  # Save a checkpoint at every step
+    save_steps=1,
+    save_total_limit=10, # Remove later to not save space
     fp16=True,
     logging_dir="/projects/bdof/nkanamarla/deepspeed-logs", 
     deepspeed=ds_config,  # Use DeepSpeed config
@@ -77,17 +78,34 @@ training_args = TrainingArguments(
     save_only_model=True,
 )
 
-# Initialize Trainer with DeepSpeed
+# Custom Callback for Profiling
+class CheckpointTimeCallback(TrainerCallback):
+    def __init__(self):
+        self.last_checkpoint_time = None
+
+    def on_train_begin(self, args, state, control, **kwargs):
+        if state.is_world_process_zero:
+            self.last_checkpoint_time = time.time()
+            print("Training started.")
+
+    def on_save(self, args, state, control, **kwargs):
+        if state.is_world_process_zero:
+            current_time = time.time()
+            if self.last_checkpoint_time is not None:
+                time_since_last_checkpoint = current_time - self.last_checkpoint_time
+                print(f"Time since last checkpoint: {time_since_last_checkpoint:.2f} seconds")
+            else:
+                print("This is the first checkpoint.")
+            self.last_checkpoint_time = current_time
+
+# Initialize Trainer with DeepSpeed and Custom Callback
 trainer = Trainer(
     model=model,
     args=training_args,
     train_dataset=tokenized_train_dataset,
     eval_dataset=tokenized_val_dataset,
+    callbacks=[CheckpointTimeCallback()],  # Add the custom callback here
 )
 
-# Training loop with checkpointing at each epoch
-for epoch in range(training_args.num_train_epochs):
-    print(f"Starting epoch {epoch + 1}")
-    trainer.train()
-    print(f"Finished epoch {epoch + 1}")
-
+# Training loop
+trainer.train()

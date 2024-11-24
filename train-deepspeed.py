@@ -67,13 +67,14 @@ tokenized_val_dataset = validation_dataset.map(tokenize_function, batched=True)
 training_args = TrainingArguments(
     output_dir="/work/hdd/bdof/nkanamarla/models",
     num_train_epochs=1,
-    save_steps=1,  # Save a checkpoint at every step
+    save_steps=10,  # Save a checkpoint at every step
     fp16=True,
     logging_dir="/projects/bdof/nkanamarla/deepspeed-logs", 
     deepspeed=ds_config,  # Use DeepSpeed config
     remove_unused_columns=False,
     save_strategy="steps",  # Save at every step
-    evaluation_strategy="epoch"
+    evaluation_strategy="epoch",
+    save_only_model=True,
 )
 
 # Initialize Trainer with DeepSpeed

@@ -18,12 +18,10 @@
         "cpu_checkpointing": true
     },
     "checkpoint": {
-        "async_io": true,
         "checkpoint_tag_validation": true,
-        "save_checkpoint_activations": true,
+        "save_checkpoint_activations": false,
         "save_debug_info": true, 
-        "enable_profiling": true,
-        "save_total_limit": 10 
+        "enable_profiling": true
     },
     "steps_per_print": 10,
     "wall_clock_breakdown": true,

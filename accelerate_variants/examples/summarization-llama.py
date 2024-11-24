@@ -72,8 +72,8 @@ def training_function(config, args):
     print("Preparing dataset")
     datasets = load_dataset("cnn_dailymail", "3.0.0")
     # Split train and validation datasets to get subsets directly
-    train_dataset = datasets["train"].train_test_split(train_size=50, seed=42)["train"]
-    val_dataset = datasets["validation"].train_test_split(test_size=10, seed=42)["test"]
+    train_dataset = datasets["train"].train_test_split(train_size=5000, seed=42)["train"]
+    val_dataset = datasets["validation"].train_test_split(test_size=1000, seed=42)["test"]
 
     print(f"Train dataset size: {len(train_dataset)}")
     print(f"Validation dataset size: {len(val_dataset)}")

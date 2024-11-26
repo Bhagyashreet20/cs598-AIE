@@ -78,24 +78,15 @@ training_args = TrainingArguments(
 )
 
 # Custom Callback for Profiling
-class CheckpointTimeCallback(TrainerCallback):
-    def __init__(self):
-        self.last_checkpoint_time = None
-
+class CheckpointTimeCallback(TrainerCallback): 
     def on_train_begin(self, args, state, control, **kwargs):
         if state.is_world_process_zero:
-            self.last_checkpoint_time = time.time()
             print("Training started.")
 
     def on_save(self, args, state, control, **kwargs):
         if state.is_world_process_zero:
-            current_time = time.time()
-            if self.last_checkpoint_time is not None:
-                time_since_last_checkpoint = current_time - self.last_checkpoint_time
-                print(f"Time since last checkpoint: {time_since_last_checkpoint:.2f} seconds")
-            else:
-                print("This is the first checkpoint.")
-            self.last_checkpoint_time = current_time
+            control = super().on_save(args, state, control, **kwargs)  # Perform the actual save and get output
+            return control
 
 # Initialize Trainer with DeepSpeed and Custom Callback
 trainer = Trainer(

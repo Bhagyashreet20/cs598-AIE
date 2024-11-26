@@ -25,7 +25,8 @@ EVAL_BATCH_SIZE = 4
 model_id = "meta-llama/Llama-3.2-3B"
 
 
-
+rank = int(os.environ.get("RANK", 0))  # Global rank
+local_rank = int(os.environ.get("LOCAL_RANK", 0))  # Rank on the current node
 
 
 
@@ -33,6 +34,7 @@ model_id = "meta-llama/Llama-3.2-3B"
 def training_function(config, args):
     # Initialize accelerator
     print("Initializing accelerator")
+    print("args.mixed_precision",args.mixed_precision)
     dataloader_config = DataLoaderConfiguration(use_stateful_dataloader=args.use_stateful_dataloader)
     if args.with_tracking:
         accelerator = Accelerator(
@@ -72,7 +74,7 @@ def training_function(config, args):
     print("Preparing dataset")
     datasets = load_dataset("cnn_dailymail", "3.0.0")
     # Split train and validation datasets to get subsets directly
-    train_dataset = datasets["train"].train_test_split(train_size=5000, seed=42)["train"]
+    train_dataset = datasets["train"].train_test_split(train_size=4000, seed=42)["train"]
     val_dataset = datasets["validation"].train_test_split(test_size=1000, seed=42)["test"]
 
     print(f"Train dataset size: {len(train_dataset)}")
@@ -134,12 +136,16 @@ def training_function(config, args):
             padding="max_length",
             max_length=max_length,
             return_tensors="pt",
+            
         )["input_ids"]
 
         labels[labels == tokenizer.pad_token_id] = -100
         model_inputs["labels"] = labels
         model_inputs["attention_mask"] = attention_mask
-        # Uncomment the following lines for debugging
+        # for key in model_inputs:
+        #     if model_inputs[key].dtype not in [torch.float32, torch.float16]:
+        #         print("model_inputs[key] is in int64 format",model_inputs[key])
+        #         model_inputs[key] = model_inputs[key].float()
       
         return model_inputs
 
@@ -230,40 +236,68 @@ def training_function(config, args):
    
                         
             for step, batch in enumerate(active_dataloader):
+                   
                     with profile(
                     activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-                    on_trace_ready=torch.profiler.tensorboard_trace_handler('./logs/tensorboard-logs/step'),
+                    # on_trace_ready=torch.profiler.tensorboard_trace_handler('./logs/tensorboard-logs/step'),
                     # on_trace_ready=lambda p: p.export_chrome_trace("./logs/profiler_trace.json"),
                     record_shapes=True,
-                    with_stack=True,
+                    with_stack=False,
                     profile_memory=True,
                     ) as prof:
-                            print("step level profiling is turned on!!")
-                            
+                            # print("*****checking the dataset status for NaN on rank:",rank," local_rank: ",local_rank)
+                            # for key, value in batch.items():
+                            #     if isinstance(value, torch.Tensor):
+                            #         print(f"Batch {step}, Key: {key}, NaN: {torch.isnan(value).any().item()}, "
+                            #             f"Min: {value.min().item()}, Max: {value.max().item()}, Dtype: {value.dtype}")
+                                        # f"Mean: {value.mean().item()}"
+                                    
+                            # print("*****done:checking the dataset status for NaN on rank:",rank," local_rank: ",local_rank)
+                            # print(f"Batch {step}: Max input length = {max(len(x) for x in batch['input_ids'])}","on localrank:", local_rank)
                             batch = {k: v.to(accelerator.device) for k, v in batch.items()}
+                            # Inspect input data
+                            # print(f"Step {step}: Max input_id = {batch['input_ids'].max()}, Min input_id = {batch['input_ids'].min()}","on localrank:", local_rank)
+                            # print(f"Step {step}: Max label = {batch['labels'].max()}, Min label = {batch['labels'].min()}","on localrank:", local_rank)
                             outputs = model(input_ids=batch["input_ids"], labels=batch["labels"])
-                            # outputs = model(**batch)
+                            
+                            # print(f"Step {step}: Logits min = {outputs.logits.min()}, max = {outputs.logits.max()}","on localrank:", local_rank)
+                           
                             loss = outputs.loss
+                            # print(f"Step {step}: Loss = {loss.item()}","on localrank:", local_rank)
                             loss = loss / gradient_accumulation_steps
                             # We keep track of the loss at each epoch
                             if args.with_tracking:
                                 total_loss += loss.detach().float()
                             accelerator.backward(loss)
+                                # Inspect gradients
+                            # for name, param in model.named_parameters():
+                            #     if param.grad is not None:
+                            #         print(f"Layer {name}: Gradient Norm = {param.grad.norm()}","on localrank:", local_rank)
+
+                            # Clip gradients
+                            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                             if step % gradient_accumulation_steps == 0:
                                 optimizer.step()
                                 lr_scheduler.step()
                                 optimizer.zero_grad()
+
                             
                             total_samples += batch["input_ids"].size(0)
-
                             overall_step += 1
+                            # Inspect logits for anomalies
+                            # print(f"Step {step}: Logits min = {outputs.logits.min()}, max = {outputs.logits.max()}","on localrank:", local_rank)
+                            # # Inspect weights
+                            # print("*******debugging Weight Norm on local rank:",local_rank,"***")
+                            # for name, param in model.named_parameters():
+                            #     print(f"Layer {name}: Weight Norm = {param.data.norm()}")
+                            # print("*******debugging Weight Norm on local rank:",local_rank,"***")
+
+
 
                         
-
-                    # if step % 2== 0:
-                    #     print("debug print of profiling")
-                    #     print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
-
+                    if overall_step % checkpointing_steps == 0:
+                        print("--profiling results--")   
+                        print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
                     
                     if isinstance(checkpointing_steps, int):
                         output_dir = f"step_{overall_step}"
@@ -275,8 +309,8 @@ def training_function(config, args):
                                 accelerator.save_state(output_dir)
                             end_ckpt = time.time()
                             print(f"Checkpointing took {end_ckpt - start_ckpt:.4f} seconds")
-                            print("--profiling results--")   
-                            print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
+                            
+                            
                                      
 
 
@@ -298,6 +332,7 @@ def training_function(config, args):
     print("End training")
     accelerator.end_training()
     total_training_time = time.time() - train_start_time
+    print("total_samples in the end",total_samples)
     throughput = total_samples / total_training_time
     print(f"Throughput: {throughput:.2f} samples/second")
 
@@ -348,7 +383,7 @@ def main():
         help="Location on where to store experiment tracking logs and relevant project information",
     )
     args = parser.parse_args()
-    config = {"lr": 2e-5, "num_epochs": 1, "seed": 42, "batch_size": 4}
+    config = {"lr": 1e-5, "num_epochs": 1, "seed": 42, "batch_size": 4}
     training_function(config, args)
 
 if __name__ == "__main__":

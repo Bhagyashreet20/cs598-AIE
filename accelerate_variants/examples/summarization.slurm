@@ -41,4 +41,3 @@ accelerate launch --num_processes 2 --config_file /projects/bdof/code/cs598-AIE/
     --use_stateful_dataloader \
     --output_dir ./checkpoints \
 
-

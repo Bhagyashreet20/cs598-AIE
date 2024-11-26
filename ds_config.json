@@ -18,10 +18,11 @@
         "cpu_checkpointing": true
     },
     "checkpoint": {
-        "checkpoint_tag_validation": true,
-        "save_checkpoint_activations": false,
-        "save_debug_info": true, 
-        "enable_profiling": true
+        "tag_validation":"Warn",
+        "use_node_local_storage":true,
+        "parallel_write": {
+            "pipeline_stage": true
+        }
     },
     "steps_per_print": 10,
     "wall_clock_breakdown": true,

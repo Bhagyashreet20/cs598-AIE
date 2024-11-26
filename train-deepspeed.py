@@ -74,8 +74,7 @@ training_args = TrainingArguments(
     deepspeed=ds_config,  # Use DeepSpeed config
     remove_unused_columns=False,
     save_strategy="steps",  # Save at every step
-    evaluation_strategy="epoch",
-    save_only_model=True,
+    evaluation_strategy="epoch"
 )
 
 # Custom Callback for Profiling

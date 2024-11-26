@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --mem=128g 
-#SBATCH --partition=gpuA100x8
+#SBATCH --partition=gpuA100x4
 #SBATCH --account=bdof-delta-gpu
 #SBATCH --job-name=train
 #SBATCH --cpus-per-gpu=8

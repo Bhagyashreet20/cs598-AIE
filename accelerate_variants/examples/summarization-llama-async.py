@@ -18,6 +18,8 @@ from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
 from torch.profiler import profile, record_function, ProfilerActivity
 import time
+import torch.distributed.checkpoint as DCP
+import torch.distributed as dist
 
 MAX_GPU_BATCH_SIZE = 4
 EVAL_BATCH_SIZE = 4
@@ -28,6 +30,12 @@ model_id = "meta-llama/Llama-3.2-3B"
 rank = int(os.environ.get("RANK", 0))  # Global rank
 local_rank = int(os.environ.get("LOCAL_RANK", 0))  # Rank on the current node
 
+# # Initialize the NCCL backend for GPU communication
+# dist.init_process_group(backend="nccl", init_method="env://")
+
+# # Initialize the Gloo backend for CPU communication
+dist.init_process_group(backend="gloo", init_method="env://")
+# print(f"Backend for GPU: {dist.get_backend()}")
 
 
 
@@ -46,7 +54,8 @@ def training_function(config, args):
         )
     else:
         accelerator = Accelerator(
-            cpu=args.cpu, mixed_precision=args.mixed_precision, dataloader_config=dataloader_config
+            cpu=args.cpu, mixed_precision=args.mixed_precision
+            , dataloader_config=dataloader_config
         )
 
     if hasattr(args.checkpointing_steps, "isdigit"):
@@ -74,8 +83,8 @@ def training_function(config, args):
     print("Preparing dataset")
     datasets = load_dataset("cnn_dailymail", "3.0.0")
     # Split train and validation datasets to get subsets directly
-    train_dataset = datasets["train"].train_test_split(train_size=4000, seed=42)["train"]
-    val_dataset = datasets["validation"].train_test_split(test_size=1000, seed=42)["test"]
+    train_dataset = datasets["train"].train_test_split(train_size=100, seed=42)["train"]
+    val_dataset = datasets["validation"].train_test_split(test_size=25, seed=42)["test"]
 
     print(f"Train dataset size: {len(train_dataset)}")
     print(f"Validation dataset size: {len(val_dataset)}")
@@ -94,7 +103,7 @@ def training_function(config, args):
 
         return model_inputs
 
-    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    tokenizer = AutoTokenizer.from_pretrained(model_id, torch_dtype=torch.bfloat16)
     # Add a pad token if it doesn't exist
     if tokenizer.pad_token is None:
         # You can use the eos_token as pad_token if there's no specific pad_token
@@ -159,7 +168,7 @@ def training_function(config, args):
     set_seed(seed)
 
     # Instantiate the model
-    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16)
+    model = AutoModelForCausalLM.from_pretrained(model_id)
     # Ensure the embedding layer matches the tokenizer vocab size
    
    
@@ -216,6 +225,9 @@ def training_function(config, args):
     print("Start training")
     total_samples = 0
     train_start_time = time.time()
+    # Keep track of async checkpoint tasks
+    pending_checkpoints = []
+    checkpoint_times = []
     for epoch in range(starting_epoch, num_epochs):
         
         # model = fix_flattened_embedding(model, vocab_size=vocab_size, hidden_size=hidden_size)
@@ -243,7 +255,7 @@ def training_function(config, args):
                     with_stack=False,
                     profile_memory=True,
                     ) as prof:
-                          
+                            print("step",step)
                             batch = {k: v.to(accelerator.device) for k, v in batch.items()}
                             outputs = model(input_ids=batch["input_ids"], labels=batch["labels"])
                             loss = outputs.loss
@@ -252,6 +264,7 @@ def training_function(config, args):
                             if args.with_tracking:
                                 total_loss += loss.detach().float()
                             accelerator.backward(loss)
+                            print('backward computation done')
                             # Clip gradients
                             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
                             if step % gradient_accumulation_steps == 0:
@@ -269,35 +282,73 @@ def training_function(config, args):
                         print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
                     
                     if isinstance(checkpointing_steps, int):
-                        output_dir = f"step_{overall_step}"
+                        
+                        output_dir = f"async_step_{overall_step}"
                         if overall_step % checkpointing_steps == 0:
+                            print("checkpointing is happening")
                             if args.output_dir is not None:
                                 output_dir = os.path.join(args.output_dir, output_dir)
-                            start_ckpt = time.time()
-                            with record_function("Checkpointing"):
-                                accelerator.save_state(output_dir)
-                            end_ckpt = time.time()
-                            print(f"Checkpointing took {end_ckpt - start_ckpt:.4f} seconds")
-                            
-                            
-                                     
+                            os.makedirs(output_dir, exist_ok=True)
+                            checkpoint_start_time = time.time()
+                            fs_storage_writer = DCP.FileSystemWriter(output_dir)
+                            checkpoint_future = DCP.async_save(
+                                    state_dict={
+                                            "model": model.state_dict() ,
+                                            "optimizer": optimizer.state_dict(),
+                                            "lr_scheduler": lr_scheduler.state_dict(),
+                                            "epoch": epoch,
+                                            "step": step,
+                                },
+                                storage_writer=fs_storage_writer,
 
+                            )
+                            checkpoint_initiation_time = time.time() - checkpoint_start_time
 
- 
+                            pending_checkpoints.append(checkpoint_future)
+                            checkpoint_times.append({"step": overall_step, "initiation_time": checkpoint_initiation_time})
+                            print(f"Async checkpointing initiated for step {overall_step} in {checkpoint_initiation_time:.4f} seconds")
+                        
+                    print(f"pending checkpoints at step{step}:{len(pending_checkpoints)}")
         
             if checkpointing_steps == "epoch":
                     print("epoch level profiling is turned on!!")
             
-                    output_dir = f"epoch_{epoch}"
+                    output_dir = f"async_epoch_{epoch}"
                     if args.output_dir is not None:
                         output_dir = os.path.join(args.output_dir, output_dir)
-                    start_ckpt = time.time()
-                    accelerator.save_state(output_dir)
-                    end_ckpt = time.time()
-                    print(f"Checkpointing took {end_ckpt - start_ckpt:.4f} seconds")
-                    print("--Profiling results for epoch--")
+                    checkpoint_start_time = time.time()
+                    fs_storage_writer = torch.distributed.checkpoint.FileSystemWriter("/checkpoints")
+                    checkpoint_future= DCP.async_save(
+                        {
+                            "model": model.state_dict(),
+                            "optimizer": optimizer.state_dict(),
+                            "lr_scheduler": lr_scheduler.state_dict(),
+                            "epoch": epoch,
+                            "step": step,
+                        },
+                        
+                        storage_writer=fs_storage_writer,
+                        
+                    )
+                    checkpoint_initiation_time = time.time() - checkpoint_start_time
+                    pending_checkpoints.append(checkpoint_future)
+                    checkpoint_times.append({"step": overall_step, "initiation_time": checkpoint_initiation_time})
+                    print(f"Async checkpointing initiated for step {epoch} in {checkpoint_initiation_time:.4f} seconds")
                     
-                            
+    # Wait for all async tasks to complete and measure the total time
+    async_checkpoint_start_time = time.time()
+    for future in pending_checkpoints:
+        print("resolving future",future)
+        future.result()  # Block until the checkpoint is fully saved
+    async_checkpoint_total_time = time.time() - async_checkpoint_start_time
+
+    print(f"All async checkpointing tasks completed in {async_checkpoint_total_time:.4f} seconds.")
+    # Report timing statistics for async checkpointing
+    # Report checkpoint timing statistics
+    if checkpoint_times:
+        avg_initiation_time = sum([entry["initiation_time"] for entry in checkpoint_times]) / len(checkpoint_times)
+        print(f"Average async checkpoint initiation time: {avg_initiation_time:.4f} seconds")
+    print("All asynchronous checkpoints completed.")                       
     print("End training")
     accelerator.end_training()
     total_training_time = time.time() - train_start_time
@@ -356,4 +407,5 @@ def main():
     training_function(config, args)
 
 if __name__ == "__main__":
+    print("entering main")
     main()

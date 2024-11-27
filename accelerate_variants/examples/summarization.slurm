@@ -1,14 +1,14 @@
 #!/bin/bash
 
 #SBATCH --mem=128g
-#SBATCH --partition=gpuA100x8
+#SBATCH --partition=gpuA100x4-interactive
 #SBATCH --account=bdof-delta-gpu
 #SBATCH --job-name=train
 #SBATCH --gpus=2
 #SBATCH --ntasks=1
 #SBATCH --gpus-per-node=2
 #SBATCH --gpus-per-task=2
-#SBATCH --time=02:00:00 
+#SBATCH --time=00:20:00 
 #SBATCH --constraint="scratch"
 #SBATCH --output=/projects/bdof/code/cs598-AIE/accelerate_variants/examples/logs/output/train.%j.out
 #SBATCH --error=/projects/bdof/code/cs598-AIE/accelerate_variants/examples/logs/error/train.%j.err
@@ -35,9 +35,10 @@ source /projects/bdof/code/cs598-AIE/myenv/bin/activate
 #     --project_dir ./training-logs
 
 
-accelerate launch --num_processes 2 --config_file /projects/bdof/code/cs598-AIE/accelerate_variants/examples/default_config.yaml \
-    summarization-llama.py \
-    --checkpointing_steps 100 \
+accelerate launch --num_processes 2 --num_cpu_threads_per_process 32 --config_file /projects/bdof/code/cs598-AIE/accelerate_variants/examples/default_config.yaml \
+    summarization-llama-async.py \
+    --checkpointing_steps 2 \
+    --mixed_precision bf16 \
     --use_stateful_dataloader \
     --output_dir ./checkpoints \
 

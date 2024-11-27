@@ -3,6 +3,7 @@
 #include <fstream>
 #include <vector>
 
+// Transfer one checkpoint between two GPUs on the same node and measure the time
 #define CHECK_CUDA(call)                                                        \
     do {                                                                        \
         cudaError_t err = call;                                                 \

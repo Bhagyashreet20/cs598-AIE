@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --mem=64g 
-#SBATCH --partition=gpuA40x4             # Request resources from gpuA100x4 partition
+#SBATCH --partition=gpuA100x4             # Request resources from gpuA100x4 partition
 #SBATCH --account=bdof-delta-gpu         # Specify account
 #SBATCH --job-name=GPU-transfer          # Job name
 #SBATCH --cpus-per-gpu=8                 # CPUs per GPU
@@ -10,7 +10,7 @@
 #SBATCH --ntasks=1                       # Number of tasks (1 per node)
 #SBATCH --gpus-per-node=2                # GPUs per node
 #SBATCH --gpus-per-task=2                # GPUs per task
-#SBATCH --time=00:30:00                  # Maximum runtime
+#SBATCH --time=00:10:00                  # Maximum runtime
 #SBATCH --constraint="scratch"           # Additional constraints
 #SBATCH --output=/projects/bdof/nkanamarla/logs/output/GPU-transfer.%j.out
 #SBATCH --error=/projects/bdof/nkanamarla/logs/error/GPU-transfer.%j.err

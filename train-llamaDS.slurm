@@ -10,7 +10,7 @@
 #SBATCH --ntasks=1
 #SBATCH --gpus-per-node=3
 #SBATCH --gpus-per-task=3
-#SBATCH --time=01:30:00 
+#SBATCH --time=03:00:00 
 #SBATCH --constraint="scratch"
 #SBATCH --output=/projects/bdof/nkanamarla/logs/output/train.%j.out
 #SBATCH --error=/projects/bdof/nkanamarla/logs/error/train.%j.err

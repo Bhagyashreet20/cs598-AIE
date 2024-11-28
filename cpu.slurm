@@ -13,9 +13,8 @@
 #load packages
 module load gcc
 module load python/3.10.13
-module load cuda/11.8.0   # Updated CUDA version
 
 # Activate virtual environment
 source /projects/bdof/code/cs598-AIE/myenv/bin/activate 
 
-python convert.py
+python convert.py pack /work/hdd/bdof/nkanamarla/models/checkpoint-171 /work/hdd/bdof/nkanamarla/models/LLAMA3checkpointbinformat/LLAMA3checkpoint.bin

@@ -1,35 +1,58 @@
-import torch
-import numpy as np
+import os
+import struct
+import argparse
 
-def convert_pth_to_bin(pth_file, output_bin_file):
-    # Load the PyTorch checkpoint
-    checkpoint = torch.load(pth_file, map_location=torch.device('cpu'))
-    
-    # Assuming the checkpoint contains a state_dict with model weights
-    if "state_dict" in checkpoint:
-        state_dict = checkpoint["state_dict"]
-    else:
-        state_dict = checkpoint
-    
-    # Flatten all weights into a single array
-    all_weights = []
-    for key, tensor in state_dict.items():
-        if isinstance(tensor, torch.Tensor):
-            # Convert BFloat16 to float32 for compatibility with NumPy
-            if tensor.dtype == torch.bfloat16:
-                tensor = tensor.to(dtype=torch.float32)
-            all_weights.append(tensor.flatten().cpu().numpy())
-        else:
-            print(f"Skipping non-tensor key: {key}")
-    
-    # Concatenate all weights
-    flattened_weights = np.concatenate(all_weights, axis=0).astype(np.float32)
+def pack_directory(input_dir, output_file):
+    with open(output_file, 'wb') as bin_file:
+        for root, _, files in os.walk(input_dir):
+            for file in files:
+                # Get the full and relative file paths
+                full_path = os.path.join(root, file)
+                relative_path = os.path.relpath(full_path, input_dir)
+                # Read file content
+                with open(full_path, 'rb') as f:
+                    data = f.read()
+                # Encode the relative file path
+                relative_path_encoded = relative_path.encode('utf-8')
+                # Pack the file name length and name
+                bin_file.write(struct.pack('I', len(relative_path_encoded)))
+                bin_file.write(relative_path_encoded)
+                # Pack the file size and data
+                bin_file.write(struct.pack('Q', len(data)))
+                bin_file.write(data)
 
-    # Save as a binary file
-    with open(output_bin_file, "wb") as f:
-        flattened_weights.tofile(f)
+def unpack_directory(input_file, output_dir):
+    with open(input_file, 'rb') as bin_file:
+        while True:
+            # Read the length of the file name
+            name_length_data = bin_file.read(4)
+            if not name_length_data:
+                break  # EOF reached
+            name_length = struct.unpack('I', name_length_data)[0]
+            # Read the file name
+            file_name = bin_file.read(name_length).decode('utf-8')
+            # Read the file size
+            file_size = struct.unpack('Q', bin_file.read(8))[0]
+            # Read the file data
+            data = bin_file.read(file_size)
+            # Create the full output path
+            output_path = os.path.join(output_dir, file_name)
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            # Write the file data
+            with open(output_path, 'wb') as f:
+                f.write(data)
 
-    print(f"Saved {len(flattened_weights)} weights to {output_bin_file}.")
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Pack or unpack a directory to/from a .bin file.")
+    parser.add_argument('action', choices=['pack', 'unpack'], help="Action to perform: pack or unpack.")
+    parser.add_argument('input', help="Input directory (for pack) or .bin file (for unpack).")
+    parser.add_argument('output', help="Output .bin file (for pack) or directory (for unpack).")
 
-# Example usage
-convert_pth_to_bin("/work/hdd/bdof/nkanamarla/models/LLAMA3download/Llama3.2-3B/consolidated.00.pth", "/work/hdd/bdof/nkanamarla/models/LLAMA3download/Llama3.2-3B/model_checkpoint.bin")
+    args = parser.parse_args()
+
+    if args.action == 'pack':
+        pack_directory(args.input, args.output)
+        print(f"Packed '{args.input}' into '{args.output}'.")
+    elif args.action == 'unpack':
+        unpack_directory(args.input, args.output)
+        print(f"Unpacked '{args.input}' into '{args.output}'.")

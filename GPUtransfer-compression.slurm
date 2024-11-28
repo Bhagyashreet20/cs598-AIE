@@ -26,6 +26,7 @@ export LD_LIBRARY_PATH=/u/nkanamarla/nvcomp-linux-x86_64-4.1.0.6_cuda11-archive/
 echo "Running on host: $(hostname)"
 echo "CUDA Devices: $CUDA_VISIBLE_DEVICES"
 echo "Job ID: $SLURM_JOB_ID"
+nvidia-smi
 
 # Compile the CUDA program
 nvcc -o transfer_weights_compression /projects/bdof/code/cs598-AIE/GPUtransfer-compression.cu \

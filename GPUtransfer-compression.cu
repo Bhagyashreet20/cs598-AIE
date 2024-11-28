@@ -3,7 +3,7 @@
 #include <fstream>
 #include <vector>
 #include <nvcomp.hpp>
-#include <nvcomp/gdeflate.hpp>
+#include <nvcomp/cascaded.hpp>
 
 #define CHECK_CUDA(call)                                                        \
     do {                                                                        \
@@ -14,7 +14,7 @@
         }                                                                       \
     } while (0)
 
-void loadCheckpointFromDisk(const std::string& filename, std::vector<float>& weights) {
+void loadCheckpointFromDisk(const std::string& filename, std::vector<uint8_t>& data) {
     std::ifstream file(filename, std::ios::binary);
     if (!file) {
         std::cerr << "Failed to open checkpoint file: " << filename << std::endl;
@@ -25,21 +25,25 @@ void loadCheckpointFromDisk(const std::string& filename, std::vector<float>& wei
     size_t fileSize = file.tellg();
     file.seekg(0, std::ios::beg);
 
-    weights.resize(fileSize / sizeof(float));
-    file.read(reinterpret_cast<char*>(weights.data()), fileSize);
+    data.resize(fileSize);
+    file.read(reinterpret_cast<char*>(data.data()), fileSize);
 
     if (!file) {
         std::cerr << "Failed to read checkpoint file: " << filename << std::endl;
         exit(EXIT_FAILURE);
     }
 
-    std::cout << "Loaded checkpoint with " << weights.size() << " weights." << std::endl;
+    std::cout << "Loaded checkpoint of size " << data.size() << " bytes." << std::endl;
 }
 
 int main() {
-    const std::string checkpointFile = "/work/hdd/bdof/nkanamarla/models/sharded_model_download/dl_state_dict.bin";
-    std::vector<float> weights;
+    // Load checkpoint from disk and split for test 
+    const std::string checkpointFile = "/work/hdd/bdof/nkanamarla/models/LLAMA3checkpointbinformat/LLAMA3checkpoint.bin";
+    std::vector<uint8_t> weights;
     loadCheckpointFromDisk(checkpointFile, weights);
+    auto middle = weights.begin() + weights.size() / 2;
+    std::vector<uint8_t> weightsFirstHalf(weights.begin(), middle);
+    std::vector<uint8_t> weightsSecondHalf(middle, weights.end());
 
     int deviceCount;
     CHECK_CUDA(cudaGetDeviceCount(&deviceCount));
@@ -74,35 +78,38 @@ int main() {
     CHECK_CUDA(cudaEventCreate(&stop));
 
     // Allocate and copy data to source GPU
-    float* d_srcWeights;
-    size_t dataSize = weights.size() * sizeof(float);
+    uint8_t* d_srcWeights;
+    size_t dataSize = weightsFirstHalf.size();
     CHECK_CUDA(cudaMalloc(&d_srcWeights, dataSize));
-    CHECK_CUDA(cudaMemcpy(d_srcWeights, weights.data(), dataSize, cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(d_srcWeights, weightsFirstHalf.data(), dataSize, cudaMemcpyHostToDevice));
     std::cout << "Weights transferred to source GPU " << srcDevice << " of size " << dataSize << " bytes." << std::endl;
 
     {
     // Start timing
     CHECK_CUDA(cudaEventRecord(start, stream));
 
-    // Set up GDeflate manager
-    nvcompBatchedGdeflateOpts_t gdeflate_opts;
-    const size_t chunk_size = 1 << 16; // 64 KB chunks
-    nvcomp::GdeflateManager gdeflate_manager(
+    // Set up compression manager
+    nvcompBatchedCascadedOpts_t cascade_options;
+    cascade_options.type =  nvcomp::TypeOf<uint8_t>();
+    cascade_options.num_RLEs = 2;
+    cascade_options.num_deltas = 1;
+    cascade_options.use_bp = 1;
+    const size_t chunk_size = 1 << 22; // 4 MB chunks
+    nvcomp::CascadedManager cascade_manager(
         chunk_size,
-        gdeflate_opts,
-        stream,
-        srcDevice,
-        nvcomp::ChecksumPolicy::NoComputeNoVerify,
-        nvcomp::BitstreamKind::NVCOMP_NATIVE
+        cascade_options,
+        stream
     );
 
     // Compress data on source GPU
-    nvcomp::CompressionConfig comp_config = gdeflate_manager.configure_compression(dataSize);
+    nvcomp::CompressionConfig comp_config = cascade_manager.configure_compression(dataSize);
     uint8_t* d_compressedData;
+    std::cout << "Compression max possible size in bytes " << comp_config.max_compressed_buffer_size << std::endl;
     CHECK_CUDA(cudaMallocAsync(&d_compressedData, comp_config.max_compressed_buffer_size, stream));
+    CHECK_CUDA(cudaStreamSynchronize(stream));
     try {
-        gdeflate_manager.compress(
-            reinterpret_cast<uint8_t*>(d_srcWeights),
+        cascade_manager.compress(
+            d_srcWeights,
             d_compressedData,
             comp_config
     );
@@ -111,15 +118,16 @@ int main() {
         exit(EXIT_FAILURE);
     }
     CHECK_CUDA(cudaStreamSynchronize(stream));
+    size_t compressed_size = cascade_manager.get_compressed_output_size(d_compressedData);
 
     // Allocate memory on destination GPU
     CHECK_CUDA(cudaSetDevice(dstDevice));
     uint8_t* d_dstCompressedData;
-    CHECK_CUDA(cudaMalloc(&d_dstCompressedData, comp_config.max_compressed_buffer_size));
+    CHECK_CUDA(cudaMalloc(&d_dstCompressedData, compressed_size));
 
     // Transfer compressed data between GPUs
     CHECK_CUDA(cudaSetDevice(srcDevice));
-    CHECK_CUDA(cudaMemcpyPeerAsync(d_dstCompressedData, dstDevice, d_compressedData, srcDevice, comp_config.max_compressed_buffer_size, stream));
+    CHECK_CUDA(cudaMemcpyPeerAsync(d_dstCompressedData, dstDevice, d_compressedData, srcDevice, compressed_size, stream));
 
     // Stop timing
     CHECK_CUDA(cudaEventRecord(stop, stream));
@@ -127,12 +135,12 @@ int main() {
 
     float milliseconds = 0;
     CHECK_CUDA(cudaEventElapsedTime(&milliseconds, start, stop));
-    std::cout << "Compressed data on source GPU of size " << comp_config.max_compressed_buffer_size << " bytes." << std::endl;
+    std::cout << "Compressed data on source GPU of size " << compressed_size << " bytes for a compression ratio of " << dataSize/compressed_size << " X." << std::endl;
     std::cout << "Data Compression and GPU-to-GPU data transfer took " << milliseconds << " ms." << std::endl;
     CHECK_CUDA(cudaFree(d_compressedData));
     CHECK_CUDA(cudaSetDevice(dstDevice));
     CHECK_CUDA(cudaFree(d_dstCompressedData));
-    } // gdeflate_manager is destroyed here
+    } // cascade_manager is destroyed here
 
     // Cleanup
     CHECK_CUDA(cudaFree(d_srcWeights));

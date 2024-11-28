@@ -14,6 +14,7 @@
         }                                                                       \
     } while (0)
 
+// For debugging 
 void memoryCheck(int GPUnum) {
     size_t free_memory, total_memory;
     cudaError_t error = cudaMemGetInfo(&free_memory, &total_memory);
@@ -81,7 +82,7 @@ int main() {
         return EXIT_FAILURE;
     }
     std::cout << "Setup peer access between source and destination GPU." << std::endl;
-    memoryCheck(srcDevice);
+    //memoryCheck(srcDevice);
 
     // Set up CUDA stream
     CHECK_CUDA(cudaSetDevice(srcDevice));
@@ -99,7 +100,7 @@ int main() {
     CHECK_CUDA(cudaMalloc(&d_srcWeights, dataSize));
     CHECK_CUDA(cudaMemcpy(d_srcWeights, weightsFirstHalf.data(), dataSize, cudaMemcpyHostToDevice));
     std::cout << "Shard weights transferred to source GPU " << srcDevice << " of size " << dataSize << " bytes." << std::endl;
-    memoryCheck(srcDevice);
+    //memoryCheck(srcDevice);
 
     {
     // Start timing
@@ -118,13 +119,12 @@ int main() {
         stream
     );
 
-    // Compress data on source GPU
+    // Compress data on source GPU 
     nvcomp::CompressionConfig comp_config = cascade_manager.configure_compression(dataSize);
     uint8_t* d_compressedData;
-    comp_config.max_compressed_buffer_size = dataSize * 0.1; // nvCOMP is too conservative with the predicted compression size 
-    std::cout << "Compression max possible size in bytes " << comp_config.max_compressed_buffer_size << std::endl;
     CHECK_CUDA(cudaMallocAsync(&d_compressedData, comp_config.max_compressed_buffer_size, stream));
     CHECK_CUDA(cudaStreamSynchronize(stream));
+    // Main limitation is memory usage of compression algo and buffer
     try {
         cascade_manager.compress(
             d_srcWeights,
@@ -137,13 +137,13 @@ int main() {
     }
     CHECK_CUDA(cudaStreamSynchronize(stream));
     size_t compressed_size = cascade_manager.get_compressed_output_size(d_compressedData);
-    memoryCheck(srcDevice);
+    //memoryCheck(srcDevice);
 
     // Allocate memory on destination GPU
     CHECK_CUDA(cudaSetDevice(dstDevice));
     uint8_t* d_dstCompressedData;
     CHECK_CUDA(cudaMalloc(&d_dstCompressedData, compressed_size));
-    memoryCheck(dstDevice);
+    //memoryCheck(dstDevice);
 
     // Transfer compressed data between GPUs
     CHECK_CUDA(cudaSetDevice(srcDevice));

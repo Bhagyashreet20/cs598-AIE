@@ -81,6 +81,9 @@ int main() {
     std::cout << "Weights transferred to source GPU " << srcDevice << " of size " << dataSize << " bytes." << std::endl;
 
     {
+    // Start timing
+    CHECK_CUDA(cudaEventRecord(start, stream));
+
     // Set up GDeflate manager
     nvcompBatchedGdeflateOpts_t gdeflate_opts;
     const size_t chunk_size = 1 << 16; // 64 KB chunks
@@ -108,18 +111,14 @@ int main() {
         exit(EXIT_FAILURE);
     }
     CHECK_CUDA(cudaStreamSynchronize(stream));
-    std::cout << "Compressed data on source GPU of size " << comp_config.max_compressed_buffer_size << " bytes." << std::endl;
 
     // Allocate memory on destination GPU
     CHECK_CUDA(cudaSetDevice(dstDevice));
     uint8_t* d_dstCompressedData;
     CHECK_CUDA(cudaMalloc(&d_dstCompressedData, comp_config.max_compressed_buffer_size));
 
-    // Start timing
-    CHECK_CUDA(cudaSetDevice(srcDevice));
-    CHECK_CUDA(cudaEventRecord(start, stream));
-
     // Transfer compressed data between GPUs
+    CHECK_CUDA(cudaSetDevice(srcDevice));
     CHECK_CUDA(cudaMemcpyPeerAsync(d_dstCompressedData, dstDevice, d_compressedData, srcDevice, comp_config.max_compressed_buffer_size, stream));
 
     // Stop timing
@@ -128,7 +127,8 @@ int main() {
 
     float milliseconds = 0;
     CHECK_CUDA(cudaEventElapsedTime(&milliseconds, start, stop));
-    std::cout << "Compressed GPU-to-GPU transfer took " << milliseconds << " ms." << std::endl;
+    std::cout << "Compressed data on source GPU of size " << comp_config.max_compressed_buffer_size << " bytes." << std::endl;
+    std::cout << "Data Compression and GPU-to-GPU data transfer took " << milliseconds << " ms." << std::endl;
     CHECK_CUDA(cudaFree(d_compressedData));
     CHECK_CUDA(cudaSetDevice(dstDevice));
     CHECK_CUDA(cudaFree(d_dstCompressedData));

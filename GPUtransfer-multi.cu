@@ -3,7 +3,7 @@
 #include <fstream>
 #include <vector>
 
-// Transfer two checkpoint shards between two soruce GPUs to one destination GPU on the same node and measure the time (0.5 ms)
+// Transfer two checkpoint shards between two source GPUs to one destination GPU on the same node and measure the time (0.5 ms)
 #define CHECK_CUDA(call)                                                        \
     do {                                                                        \
         cudaError_t err = call;                                                 \
@@ -37,13 +37,14 @@ void loadCheckpointFromDisk(const std::string& filename, std::vector<float>& wei
 
 int main() {
     // File paths for the two files to be transferred
-    const std::string checkpointFile1 = "/work/hdd/bdof/nkanamarla/models/sharded_model_download/dl_state_dict_1.bin";
-    const std::string checkpointFile2 = "/work/hdd/bdof/nkanamarla/models/sharded_model_download/dl_state_dict.bin";
+    const std::string checkpointFile = "/work/hdd/bdof/nkanamarla/models/LLAMA3checkpointbinformatDS";
 
     // Load files into memory
-    std::vector<float> weights1, weights2;
-    loadCheckpointFromDisk(checkpointFile1, weights1);
-    loadCheckpointFromDisk(checkpointFile2, weights2);
+    std::vector<float> weights;
+    loadCheckpointFromDisk(checkpointFile1, weights);
+    auto middle = weights.begin() + weights.size() / 2;
+    std::vector<uint8_t> weights1(weights.begin(), middle);
+    std::vector<uint8_t> weights2(middle, weights.end());
 
     // Set the GPUs to use
     int deviceCount;

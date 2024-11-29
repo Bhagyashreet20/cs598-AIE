@@ -28,7 +28,7 @@ void memoryCheck(int GPUnum) {
     std::cout << "For GPU " << GPUnum << " Used GPU memory: " << (total_memory - free_memory) / (1024 * 1024) << " MB" << std::endl;
 }
 
-void loadCheckpointFromDisk(const std::string& filename, std::vector<uint8_t>& data) {
+void loadCheckpointFromDisk(const std::string& filename, std::vector<float>& data) {
     std::ifstream file(filename, std::ios::binary);
     if (!file) {
         std::cerr << "Failed to open checkpoint file: " << filename << std::endl;
@@ -52,14 +52,14 @@ void loadCheckpointFromDisk(const std::string& filename, std::vector<uint8_t>& d
 
 int main() {
     // Load checkpoint from disk and split for test 
-    const std::string checkpointFile = "/work/hdd/bdof/nkanamarla/models/LLAMA3checkpointbinformat/LLAMA3checkpoint.bin";
-    std::vector<uint8_t> weights;
+    const std::string checkpointFile = "/work/hdd/bdof/nkanamarla/models/sample_model_checkpoint/checkpoint.bin";
+    std::vector<float> weights;
     loadCheckpointFromDisk(checkpointFile, weights);
 
     // Split up checkpoint code for next part
     auto middle = weights.begin() + weights.size() / 2;
-    std::vector<uint8_t> weightsFirstHalf(weights.begin(), middle);
-    std::vector<uint8_t> weightsSecondHalf(middle, weights.end());
+    std::vector<float> weightsFirstHalf(weights.begin(), middle);
+    std::vector<float> weightsSecondHalf(middle, weights.end());
 
     int deviceCount;
     CHECK_CUDA(cudaGetDeviceCount(&deviceCount));
@@ -82,7 +82,7 @@ int main() {
         return EXIT_FAILURE;
     }
     std::cout << "Setup peer access between source and destination GPU." << std::endl;
-    //memoryCheck(srcDevice);
+    memoryCheck(srcDevice);
 
     // Set up CUDA stream
     CHECK_CUDA(cudaSetDevice(srcDevice));
@@ -96,11 +96,11 @@ int main() {
 
     // Allocate and copy data to source GPU
     uint8_t* d_srcWeights;
-    size_t dataSize = weightsFirstHalf.size();
+    size_t dataSize = weights.size();
     CHECK_CUDA(cudaMalloc(&d_srcWeights, dataSize));
-    CHECK_CUDA(cudaMemcpy(d_srcWeights, weightsFirstHalf.data(), dataSize, cudaMemcpyHostToDevice));
+    CHECK_CUDA(cudaMemcpy(d_srcWeights, weights.data(), dataSize, cudaMemcpyHostToDevice));
     std::cout << "Shard weights transferred to source GPU " << srcDevice << " of size " << dataSize << " bytes." << std::endl;
-    //memoryCheck(srcDevice);
+    memoryCheck(srcDevice);
 
     {
     // Start timing
@@ -109,7 +109,7 @@ int main() {
     // Set up compression manager
     nvcompBatchedCascadedOpts_t cascade_options;
     cascade_options.type =  nvcomp::TypeOf<uint8_t>();
-    cascade_options.num_RLEs = 1;
+    cascade_options.num_RLEs = 2;
     cascade_options.num_deltas = 1;
     cascade_options.use_bp = 1;
     const size_t chunk_size = 1 << 22; // 4 MB chunks
@@ -137,7 +137,7 @@ int main() {
     }
     CHECK_CUDA(cudaStreamSynchronize(stream));
     size_t compressed_size = cascade_manager.get_compressed_output_size(d_compressedData);
-    //memoryCheck(srcDevice);
+    memoryCheck(srcDevice);
 
     // Allocate memory on destination GPU
     CHECK_CUDA(cudaSetDevice(dstDevice));

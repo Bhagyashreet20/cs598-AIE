@@ -3,12 +3,12 @@
 #include <fstream>
 #include <vector>
 
-// Transfer one checkpoint between two GPUs on the same node and measure the time
+// Transfer one checkpoint shard between two GPUs on the same node and measure the time
 #define CHECK_CUDA(call)                                                        \
     do {                                                                        \
         cudaError_t err = call;                                                 \
         if (err != cudaSuccess) {                                               \
-            std::cerr << "CUDA error: " << cudaGetErrorString(err) << std::endl;\
+            std::cerr << "CUDA error at " << __FILE__ << ":" << __LINE__ << " - " << cudaGetErrorString(err) << std::endl; \
             exit(EXIT_FAILURE);                                                 \
         }                                                                       \
     } while (0)
@@ -32,16 +32,19 @@ void loadCheckpointFromDisk(const std::string& filename, std::vector<float>& wei
         exit(EXIT_FAILURE);
     }
 
-    std::cout << "Loaded checkpoint with " << weights.size() << " weights." << std::endl;
+    std::cout << "Loaded checkpoint of size " << weights.size() * sizeof(float) << " bytes in CPU memory." << std::endl;
 }
 
 int main() {
     // Model checkpoint filename
-    const std::string checkpointFile = "/work/hdd/bdof/nkanamarla/models/LLAMA3download/model_checkpoint.bin";
+    const std::string checkpointFile = "/work/hdd/bdof/nkanamarla/models/LLAMA3checkpointbinformatDS/LLAMA3checkpoint.bin";
 
     // Load model weights from disk
     std::vector<float> weights;
     loadCheckpointFromDisk(checkpointFile, weights);
+    auto middle = weights.begin() + weights.size() / 2;
+    std::vector<uint8_t> weights1(weights.begin(), middle);
+    std::vector<uint8_t> weights2(middle, weights.end());
 
     // Set the GPUs to use
     int deviceCount;
@@ -57,11 +60,10 @@ int main() {
     // Allocate memory on source GPU
     CHECK_CUDA(cudaSetDevice(srcDevice));
     float* d_srcWeights;
-    size_t dataSize = weights.size() * sizeof(float);
+    size_t dataSize = weights1.size() * sizeof(float);
     CHECK_CUDA(cudaMalloc(&d_srcWeights, dataSize));
-    CHECK_CUDA(cudaMemcpy(d_srcWeights, weights.data(), dataSize, cudaMemcpyHostToDevice));
-
-    std::cout << "Weights transferred to GPU " << srcDevice << "." << std::endl;
+    CHECK_CUDA(cudaMemcpy(d_srcWeights, weights1.data(), dataSize, cudaMemcpyHostToDevice));
+    std::cout << "Checkpoint shard transferred to GPU " << srcDevice << " of size " << dataSize << " bytes." << std::endl;
 
     // Enable peer access between GPUs
     int canAccessPeer;
@@ -79,6 +81,7 @@ int main() {
     CHECK_CUDA(cudaMalloc(&d_dstWeights, dataSize));
 
     // Create CUDA events for timing
+    std::cout << "Begin experiment simulating GPU cache checkpointing from GPU " << srcDevice << " to GPU " << dstDevice << "." << std::endl;
     cudaEvent_t start, stop;
     CHECK_CUDA(cudaEventCreate(&start));
     CHECK_CUDA(cudaEventCreate(&stop));

@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --mem=64g 
+#SBATCH --mem=128g 
 #SBATCH --partition=gpuA100x4             # Request resources from gpuA100x4 partition
 #SBATCH --account=bdof-delta-gpu         # Specify account
 #SBATCH --job-name=GPU-transfer          # Job name
@@ -23,9 +23,10 @@ module load cuda/11.8.0   # Load the correct CUDA module
 echo "Running on host: $(hostname)"
 echo "CUDA Devices: $CUDA_VISIBLE_DEVICES"
 echo "Job ID: $SLURM_JOB_ID"
+nvidia-smi 
 
 # Compile the CUDA program
-nvcc -o transfer_weights /projects/bdof/code/cs598-AIE/GPUtransfer.cu
+nvcc -o transfer_weights /projects/bdof/code/cs598-AIE/GPUtransfer-basic.cu
 if [ $? -ne 0 ]; then
     echo "CUDA program compilation failed."
     exit 1

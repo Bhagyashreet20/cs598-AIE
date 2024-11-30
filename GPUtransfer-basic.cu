@@ -37,14 +37,11 @@ void loadCheckpointFromDisk(const std::string& filename, std::vector<float>& wei
 
 int main() {
     // Model checkpoint filename
-    const std::string checkpointFile = "/work/hdd/bdof/nkanamarla/models/LLAMA3checkpointbinformatDS/LLAMA3checkpoint.bin";
+    const std::string checkpointFile = "/work/hdd/bdof/nkanamarla/models/LLAMA3checkpointbinformat/LLAMA3checkpoint.bin";
 
     // Load model weights from disk
     std::vector<float> weights;
     loadCheckpointFromDisk(checkpointFile, weights);
-    auto middle = weights.begin() + weights.size() / 2;
-    std::vector<uint8_t> weights1(weights.begin(), middle);
-    std::vector<uint8_t> weights2(middle, weights.end());
 
     // Set the GPUs to use
     int deviceCount;
@@ -60,10 +57,10 @@ int main() {
     // Allocate memory on source GPU
     CHECK_CUDA(cudaSetDevice(srcDevice));
     float* d_srcWeights;
-    size_t dataSize = weights1.size() * sizeof(float);
+    size_t dataSize = weights.size() * sizeof(float);
     CHECK_CUDA(cudaMalloc(&d_srcWeights, dataSize));
-    CHECK_CUDA(cudaMemcpy(d_srcWeights, weights1.data(), dataSize, cudaMemcpyHostToDevice));
-    std::cout << "Checkpoint shard transferred to GPU " << srcDevice << " of size " << dataSize << " bytes." << std::endl;
+    CHECK_CUDA(cudaMemcpy(d_srcWeights, weights.data(), dataSize, cudaMemcpyHostToDevice));
+    std::cout << "Checkpoint transferred to GPU " << srcDevice << " of size " << dataSize << " bytes." << std::endl;
 
     // Enable peer access between GPUs
     int canAccessPeer;

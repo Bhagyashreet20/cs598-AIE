@@ -17,4 +17,5 @@ module load python/3.10.13
 # Activate virtual environment
 source /projects/bdof/code/cs598-AIE/myenv/bin/activate 
 
-python convertFile.py /work/hdd/bdof/nkanamarla/models/sample_model_checkpoint/model-00001-of-00002.safetensors /work/hdd/bdof/nkanamarla/models/sample_model_checkpoint/checkpoint.bin
+#python convertFile.py /work/hdd/bdof/nkanamarla/models/sample_model_checkpoint/model-00001-of-00002.safetensors /work/hdd/bdof/nkanamarla/models/sample_model_checkpoint/checkpoint.bin
+python convertFolder.py pack /projects/bdof/code/cs598-AIE/accelerate_variants/examples/checkpoints/step_100 /work/hdd/bdof/nkanamarla/models/LLAMA3checkpointbinformat/LLAMA3checkpoint.bin   

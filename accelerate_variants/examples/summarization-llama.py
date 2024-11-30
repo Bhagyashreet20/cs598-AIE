@@ -18,7 +18,7 @@ from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 
 from torch.profiler import profile, record_function, ProfilerActivity
 import time
-
+import torch.cuda.nvtx as nvtx
 MAX_GPU_BATCH_SIZE = 4
 EVAL_BATCH_SIZE = 4
 
@@ -217,7 +217,7 @@ def training_function(config, args):
     total_samples = 0
     train_start_time = time.time()
     for epoch in range(starting_epoch, num_epochs):
-        
+        epoch_start = time.time()
         # model = fix_flattened_embedding(model, vocab_size=vocab_size, hidden_size=hidden_size)
        
         model.train()
@@ -236,72 +236,70 @@ def training_function(config, args):
    
                         
             for step, batch in enumerate(active_dataloader):
-                   
-                    with profile(
-                    activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA],
-                    record_shapes=True,
-                    with_stack=False,
-                    profile_memory=True,
-                    ) as prof:
-                          
-                            batch = {k: v.to(accelerator.device) for k, v in batch.items()}
-                            outputs = model(input_ids=batch["input_ids"], labels=batch["labels"])
-                            loss = outputs.loss
-                            loss = loss / gradient_accumulation_steps
-                            # We keep track of the loss at each epoch
-                            if args.with_tracking:
-                                total_loss += loss.detach().float()
-                            accelerator.backward(loss)
-                            # Clip gradients
-                            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-                            if step % gradient_accumulation_steps == 0:
-                                optimizer.step()
-                                lr_scheduler.step()
-                                optimizer.zero_grad()
+       
+                step_start_time = time.time()
+                batch = {k: v.to(accelerator.device) for k, v in batch.items()}
+                outputs = model(input_ids=batch["input_ids"], labels=batch["labels"])
+                loss = outputs.loss
+                loss = loss / gradient_accumulation_steps
+                # We keep track of the loss at each epoch
+                if args.with_tracking:
+                    total_loss += loss.detach().float()
+                accelerator.backward(loss)
+                # Clip gradients
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                if step % gradient_accumulation_steps == 0:
+                    optimizer.step()
+                    lr_scheduler.step()
+                    optimizer.zero_grad()
 
-                            
-                            total_samples += batch["input_ids"].size(0)
-                            overall_step += 1
-
+                
+                total_samples += batch["input_ids"].size(0)
+                overall_step += 1
+                total_step_time = time.time()-step_start_time
+                print(f"Step:{step} took {total_step_time:.4f} seconds")
                         
+            
+                if isinstance(checkpointing_steps, int):
+                   
+                    output_dir = f"step_{overall_step}"
                     if overall_step % checkpointing_steps == 0:
-                        print("--profiling results--")   
-                        print(prof.key_averages().table(sort_by="cuda_time_total", row_limit=10))
-                    
-                    if isinstance(checkpointing_steps, int):
-                        output_dir = f"step_{overall_step}"
-                        if overall_step % checkpointing_steps == 0:
-                            if args.output_dir is not None:
-                                output_dir = os.path.join(args.output_dir, output_dir)
-                            start_ckpt = time.time()
-                            with record_function("Checkpointing"):
-                                accelerator.save_state(output_dir)
-                            end_ckpt = time.time()
-                            print(f"Checkpointing took {end_ckpt - start_ckpt:.4f} seconds")
+                        if args.output_dir is not None:
+                            output_dir = os.path.join(args.output_dir, output_dir)
+                        nvtx.range_push(f"Step:{step} Level Checkpointing")
+                        start_ckpt = time.time()
+                         
+                        accelerator.save_state(output_dir)
+                        end_ckpt = time.time()
+                        nvtx.range_pop()
+                        print(f"Checkpointing took {end_ckpt - start_ckpt:.4f} seconds")
+                        
                             
                             
                                      
 
 
- 
-        
-            if checkpointing_steps == "epoch":
-                    print("epoch level profiling is turned on!!")
+            print(f"Epoch:{epoch} took {time.time()-epoch_start:.4f} seconds")
             
+            if checkpointing_steps == "epoch": 
+                    print("epoch level profiling is turned on!!")
                     output_dir = f"epoch_{epoch}"
                     if args.output_dir is not None:
                         output_dir = os.path.join(args.output_dir, output_dir)
                     start_ckpt = time.time()
+                    nvtx.range_push("Epoch Level Checkpointing") 
                     accelerator.save_state(output_dir)
                     end_ckpt = time.time()
                     print(f"Checkpointing took {end_ckpt - start_ckpt:.4f} seconds")
-                    print("--Profiling results for epoch--")
+                    nvtx.range_pop()
+                 
                     
                             
     print("End training")
     accelerator.end_training()
     total_training_time = time.time() - train_start_time
     print("total_samples in the end",total_samples)
+    print("total_training_time",total_training_time)
     throughput = total_samples / total_training_time
     print(f"Throughput: {throughput:.2f} samples/second")
 

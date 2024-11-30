@@ -176,3 +176,6 @@ custom_triton_cache/
 
 # virtual env 
 myenv/
+accelerate_variants/examples/profiling/
+fio/
+accelerate_variants/examples/bhagya_config.yaml

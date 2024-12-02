@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #SBATCH --mem=64g 
-#SBATCH --partition=gpuA100x8             # Request resources from gpuA100x4 partition
+#SBATCH --partition=gpuA100x4            # Request resources from gpuA100x4 partition
 #SBATCH --account=bdof-delta-gpu         # Specify account
 #SBATCH --job-name=GPU-transfer          # Job name
 #SBATCH --cpus-per-gpu=8                 # CPUs per GPU

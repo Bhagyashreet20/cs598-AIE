@@ -29,7 +29,7 @@ void memoryCheck(int GPUnum) {
 }
 
 void loadCheckpointFromDisk(const std::string& filename, std::vector<float>& data) {
-    std::ifstream file(filename, std::ios::binary);
+    std::ifstream file(filename, std::ios::binary | std::ios::ate);
     if (!file) {
         std::cerr << "Failed to open checkpoint file: " << filename << std::endl;
         exit(EXIT_FAILURE);
@@ -52,7 +52,7 @@ void loadCheckpointFromDisk(const std::string& filename, std::vector<float>& dat
 
 int main() {
     // Load checkpoint from disk and split for test 
-    const std::string checkpointFile = "/work/hdd/bdof/nkanamarla/models/sample_model_checkpoint/checkpoint.bin";
+    const std::string checkpointFile = "/projects/bdof/code/cs598-AIE/accelerate_variants/examples/checkpoints/step_150/pytorch_model_fsdp_0/__0_0.distcp";
     std::vector<float> weights;
     loadCheckpointFromDisk(checkpointFile, weights);
 

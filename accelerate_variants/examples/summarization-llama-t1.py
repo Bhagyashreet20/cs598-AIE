@@ -19,6 +19,8 @@ from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
 from torch.profiler import profile, record_function, ProfilerActivity
 import time
 import torch.cuda.nvtx as nvtx
+import numpy as np
+
 MAX_GPU_BATCH_SIZE = 4
 EVAL_BATCH_SIZE = 4
 
@@ -27,6 +29,60 @@ model_id = "meta-llama/Llama-3.2-3B"
 
 rank = int(os.environ.get("RANK", 0))  # Global rank
 local_rank = int(os.environ.get("LOCAL_RANK", 0))  # Rank on the current node
+
+import time
+import torch
+
+def retrieve_fsdp_states(accelerator, model, optimizer):
+    # Ensure all GPU operations are complete before timing
+    torch.cuda.synchronize()
+    start_time = time.time()
+
+    # Unwrap the model and move the state dict to CPU
+    model_dl_state_dict = accelerator.unwrap_model(model).state_dict()
+
+    
+    model_dl_state_dict_cpu = {k: v.cpu() for k, v in model_dl_state_dict.items()}
+
+    # Measure time for model transfer
+    torch.cuda.synchronize()
+    model_transfer_time = time.time() - start_time
+    print(f"Model state transfer time: {model_transfer_time:.4f} seconds")
+
+    # Start timing optimizer transfer
+    start_time = time.time()
+
+    # Move optimizer state to CPU
+    optimizer_state = optimizer.state_dict()
+    for key in optimizer_state["state"]:
+        for state_key, value in optimizer_state["state"][key].items():
+            if isinstance(value, torch.Tensor):
+                optimizer_state["state"][key][state_key] = value.cpu()
+
+    # Measure time for optimizer transfer
+    torch.cuda.synchronize()
+    optimizer_transfer_time = time.time() - start_time
+    print(f"Optimizer state transfer time: {optimizer_transfer_time:.4f} seconds")
+
+    # Retrieve random states (these are not GPU operations, so no timing needed)
+    import random
+    import numpy as np
+    random_state = random.getstate()
+    numpy_state = np.random.get_state()
+    torch_random_state_cpu = torch.get_rng_state()
+    torch_random_state_gpu = torch.cuda.get_rng_state()
+
+    # Return all states
+    return {
+        "model_state": model_dl_state_dict_cpu,
+        "optimizer_state": optimizer_state,
+        "random_states": {
+            "python_random": random_state,
+            "numpy_random": numpy_state,
+            "torch_cpu_random": torch_random_state_cpu,
+            "torch_gpu_random": torch_random_state_gpu,
+        },
+    }
 
 
 
@@ -266,13 +322,18 @@ def training_function(config, args):
                     if overall_step % checkpointing_steps == 0:
                         if args.output_dir is not None:
                             output_dir = os.path.join(args.output_dir, output_dir)
-                        nvtx.range_push(f"Step:{step} Level Checkpointing")
-                        start_ckpt = time.time()
+                        
+                        print("---moving the model to cpu manually--")
+                        result = retrieve_fsdp_states(accelerator,model,optimizer)
+                        # nvtx.range_push(f"Step:{step} Level Checkpointing")
+                        # start_ckpt = time.time()
                          
-                        accelerator.save_state(output_dir)
-                        end_ckpt = time.time()
-                        nvtx.range_pop()
-                        print(f"Checkpointing took {end_ckpt - start_ckpt:.4f} seconds")
+                        # accelerator.save_state(output_dir)
+                        # end_ckpt = time.time()
+                        # nvtx.range_pop()
+                        # print(f"Checkpointing took {end_ckpt - start_ckpt:.4f} seconds")
+                        
+                        
                         
                             
                             

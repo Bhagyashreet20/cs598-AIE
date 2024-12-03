@@ -164,10 +164,10 @@ cython_debug/
 # Output folder 
 logs/output
 logs/error
-accelerate_variants/examples/checkpoints
-accelerate_variants/examples/training-logs/summarization-llama
-accelerate_variants/examples/wandb
-accelerate_variants/examples/logs
+accelerate_variants/checkpoints
+accelerate_variants/training-logs/summarization-llama
+accelerate_variants/wandb
+accelerate_variants/logs
 #hf cache
 custom_hf_cache/
 
@@ -176,6 +176,6 @@ custom_triton_cache/
 
 # virtual env 
 myenv/
-accelerate_variants/examples/profiling/
+accelerate_variants/profiling/
 fio/
-accelerate_variants/examples/bhagya_config.yaml
+accelerate_variants/bhagya_config.yaml

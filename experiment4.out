@@ -1,0 +1,112 @@
+STARTTIME Tue Dec 3 16:20:14 CST 2024
+Lmod Warning:
+-------------------------------------------------------------------------------
+The following dependent module(s) are not currently loaded: gcc-runtime/8.5.0
+(required by: python/3.10.13)
+-------------------------------------------------------------------------------
+
+
+
+
+The following have been reloaded with a version change:
+  1) cuda/11.8.0 => cuda/12.4.0     2) gcc-runtime/8.5.0 => gcc-runtime/11.4.0
+
+mkdir: cannot create directory ‘/projects’: File exists
+Tue Dec  3 16:20:18 2024       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 550.90.07              Driver Version: 550.90.07      CUDA Version: 12.4     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA A100-SXM4-40GB          On  |   00000000:07:00.0 Off |                    0 |
+| N/A   29C    P0             53W /  400W |       1MiB /  40960MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+|   1  NVIDIA A100-SXM4-40GB          On  |   00000000:46:00.0 Off |                    0 |
+| N/A   29C    P0             52W /  400W |       1MiB /  40960MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI        PID   Type   Process name                              GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+W1203 16:20:53.128000 2385338 torch/distributed/run.py:793] 
+W1203 16:20:53.128000 2385338 torch/distributed/run.py:793] *****************************************
+W1203 16:20:53.128000 2385338 torch/distributed/run.py:793] Setting OMP_NUM_THREADS environment variable for each process to be 1 in default, to avoid your system being overloaded, please further tune the variable for optimal performance in your application as needed. 
+W1203 16:20:53.128000 2385338 torch/distributed/run.py:793] *****************************************
+rank: 0, init distributedrank: 1, init distributed
+
+You are using the default legacy behaviour of the <class 'transformers.models.t5.tokenization_t5.T5Tokenizer'>. This is expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you. If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it means, and thoroughly read the reason why this was added as explained in https://github.com/huggingface/transformers/pull/24565
+You are using the default legacy behaviour of the <class 'transformers.models.t5.tokenization_t5.T5Tokenizer'>. This is expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you. If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it means, and thoroughly read the reason why this was added as explained in https://github.com/huggingface/transformers/pull/24565
+Map:   0%|          | 0/4 [00:00<?, ? examples/s]Map:   0%|          | 0/4 [00:00<?, ? examples/s]/projects/bdof/leatherman/leatherman_env_llama3/lib/python3.10/site-packages/transformers/tokenization_utils_base.py:4114: UserWarning: `as_target_tokenizer` is deprecated and will be removed in v5 of Transformers. You can tokenize your labels by using the argument `text_target` of the regular `__call__` method (either in the same call as your input texts if you use the same keyword arguments, or in a separate call.
+  warnings.warn(
+/projects/bdof/leatherman/leatherman_env_llama3/lib/python3.10/site-packages/transformers/tokenization_utils_base.py:4114: UserWarning: `as_target_tokenizer` is deprecated and will be removed in v5 of Transformers. You can tokenize your labels by using the argument `text_target` of the regular `__call__` method (either in the same call as your input texts if you use the same keyword arguments, or in a separate call.
+  warnings.warn(
+Map: 100%|██████████| 4/4 [00:00<00:00, 25.11 examples/s]Map: 100%|██████████| 4/4 [00:00<00:00, 25.11 examples/s]
+
+Detected kernel version 4.18.0, which is below the recommended minimum of 5.5.0; this can cause the process to hang. It is recommended to upgrade the kernel to the minimum version or higher.
+[2024-12-03 16:21:14,944] [INFO] [real_accelerator.py:219:get_accelerator] Setting ds_accelerator to cuda (auto detect)
+[2024-12-03 16:21:14,945] [INFO] [real_accelerator.py:219:get_accelerator] Setting ds_accelerator to cuda (auto detect)
+Warning: The cache directory for DeepSpeed Triton autotune, /u/leatherman/.triton/autotune, appears to be on an NFS system. While this is generally acceptable, if you experience slowdowns or hanging when DeepSpeed exits, it is recommended to set the TRITON_CACHE_DIR environment variable to a non-NFS path.Warning: The cache directory for DeepSpeed Triton autotune, /u/leatherman/.triton/autotune, appears to be on an NFS system. While this is generally acceptable, if you experience slowdowns or hanging when DeepSpeed exits, it is recommended to set the TRITON_CACHE_DIR environment variable to a non-NFS path.
+
+wandb: WARNING The `run_name` is currently set to the same value as `TrainingArguments.output_dir`. If this was not intended, please specify a different run name by setting the `TrainingArguments.run_name` parameter.
+wandb: Using wandb-core as the SDK backend.  Please refer to https://wandb.me/wandb-core for more information.
+wandb: Currently logged in as: jl180. Use `wandb login --relogin` to force relogin
+wandb: Tracking run with wandb version 0.18.7
+wandb: Run data is saved locally in /projects/bdof/leatherman/wandb/run-20241203_162122-8seqat8f
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run /projects/bdof/leatherman/t5_checkpoints
+wandb: ⭐️ View project at https://wandb.ai/jl180/huggingface
+wandb: 🚀 View run at https://wandb.ai/jl180/huggingface/runs/8seqat8f
+  0%|          | 0/2 [00:00<?, ?it/s]Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.48.0. You should pass an instance of `EncoderDecoderCache` instead, e.g. `past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`.
+Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.48.0. You should pass an instance of `EncoderDecoderCache` instead, e.g. `past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`.
+[rank0]:[W1203 16:21:31.829478319 reducer.cpp:1400] Warning: find_unused_parameters=True was specified in DDP constructor, but did not find any unused parameters in the forward pass. This flag results in an extra traversal of the autograd graph every iteration,  which can adversely affect performance. If your model indeed never has any unused parameters in the forward pass, consider turning this flag off. Note that this warning may be a false positive if your model has flow control causing later iterations to have unused parameters. (function operator())
+[rank1]:[W1203 16:21:31.829476586 reducer.cpp:1400] Warning: find_unused_parameters=True was specified in DDP constructor, but did not find any unused parameters in the forward pass. This flag results in an extra traversal of the autograd graph every iteration,  which can adversely affect performance. If your model indeed never has any unused parameters in the forward pass, consider turning this flag off. Note that this warning may be a false positive if your model has flow control causing later iterations to have unused parameters. (function operator())
+device: 1, Time: 2024-12-03 16:21:35.306, naybelogsaveevaluate start
+ 50%|█████     | 1/2 [00:12<00:12, 12.59s/it]device: 0, Time: 2024-12-03 16:21:35.307, naybelogsaveevaluate start
+2024-12-03 16:21:35.307 rank: 0,start receiving
+2024-12-03 16:21:35.308 Rank 1: start sending!! model_state_dict: type <class 'dict'>, length: 134
+2024-12-03 16:21:35.792 Rank 1 done sending-------------------------
+device: 1, Time: 2024-12-03 16:21:35.792, naybelogsaveevaluate end
+device: 1, Time: 2024-12-03 16:21:35.792, naybelogsaveevaluate start
+2024-12-03 16:21:35.793 Rank 1: start sending!! model_state_dict: type <class 'dict'>, length: 134
+2024-12-03 16:21:35.844 Rank 0 done receiving-------------------------
+device: 0, Time: 2024-12-03 16:21:35.845, naybelogsaveevaluate end
+device: 0, Time: 2024-12-03 16:21:35.845, naybelogsaveevaluate start
+2024-12-03 16:21:35.845 rank: 0,start receiving
+2024-12-03 16:21:35.974 Rank 1 done sending-------------------------
+device: 1, Time: 2024-12-03 16:21:35.974, naybelogsaveevaluate end
+2024-12-03 16:21:36.026 Rank 0 done receiving-------------------------
+device: 0, Time: 2024-12-03 16:21:36.028, naybelogsaveevaluate end
+100%|██████████| 2/2 [00:13<00:00,  5.64s/it]device: 1, Time: 2024-12-03 16:21:36.080, naybelogsaveevaluate start
+device: 0, Time: 2024-12-03 16:21:36.080, naybelogsaveevaluate start
+2024-12-03 16:21:36.080 rank: 0,start receiving
+2024-12-03 16:21:36.081 Rank 1: start sending!! model_state_dict: type <class 'dict'>, length: 134
+2024-12-03 16:21:36.212 Rank 1 done sending-------------------------
+device: 1, Time: 2024-12-03 16:21:36.213, naybelogsaveevaluate end
+device: 1, Time: 2024-12-03 16:21:36.213, naybelogsaveevaluate start
+2024-12-03 16:21:36.214 Rank 1: start sending!! model_state_dict: type <class 'dict'>, length: 134
+2024-12-03 16:21:36.264 Rank 0 done receiving-------------------------
+device: 0, Time: 2024-12-03 16:21:36, _save_checkpoint count: 0, _save_checkpoint start
+device: 0, Time: 2024-12-03 16:21:36, _save_checkpoint count: 0, _save_checkpoint end
+device: 0, Time: 2024-12-03 16:21:36.722, naybelogsaveevaluate end
+device: 0, Time: 2024-12-03 16:21:36.722, naybelogsaveevaluate start
+2024-12-03 16:21:36.722 rank: 0,start receiving
+2024-12-03 16:21:36.849 Rank 1 done sending-------------------------
+device: 1, Time: 2024-12-03 16:21:36.849, naybelogsaveevaluate end
+training finished
+2024-12-03 16:21:36.903 Rank 0 done receiving-------------------------
+device: 0, Time: 2024-12-03 16:21:36.904, naybelogsaveevaluate end
+                                             {'train_runtime': 15.1025, 'train_samples_per_second': 0.53, 'train_steps_per_second': 0.132, 'train_loss': 15.032903671264648, 'epoch': 2.0}
+100%|██████████| 2/2 [00:14<00:00,  5.64s/it]100%|██████████| 2/2 [00:14<00:00,  7.09s/it]
+training finished
+[1;34mwandb[0m: 🚀 View run [33m/projects/bdof/leatherman/t5_checkpoints[0m at: [34mhttps://wandb.ai/jl180/huggingface/runs/8seqat8f[0m
+[1;34mwandb[0m: Find logs at: [1;35mwandb/run-20241203_162122-8seqat8f/logs[0m
+[rank0]:[W1203 16:21:37.969226144 ProcessGroupNCCL.cpp:1250] Warning: WARNING: process group has NOT been destroyed before we destruct ProcessGroupNCCL. On normal program exit, the application should call destroy_process_group to ensure that any pending NCCL operations have finished in this process. In rare cases this process can exit before this point and block the progress of another member of the process group. This constraint has always been present,  but this warning has only been added since PyTorch 2.4 (function operator())
+ENDTIME Tue Dec 3 16:21:42 CST 2024

@@ -65,7 +65,7 @@ tokenized_val_dataset = validation_dataset.map(tokenize_function, batched=True)
 
 # Training arguments with DeepSpeed
 training_args = TrainingArguments(
-    output_dir="/work/hdd/bdof/nkanamarla/models",
+    output_dir="/work/nvme/bdof/nkanamarla",
     num_train_epochs=1,
     save_steps=1,
     save_total_limit=10, # Remove later to not save space

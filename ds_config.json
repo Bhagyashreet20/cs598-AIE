@@ -19,7 +19,7 @@
     },
     "checkpoint": {
         "tag_validation":"Warn",
-        "use_node_local_storage":true,
+        "use_node_local_storage":false,
         "parallel_write": {
             "pipeline_stage": true
         }

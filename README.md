@@ -34,10 +34,6 @@ This repository contains scripts and configurations for running various experime
      .\env\Scripts\activate
      ```
     - Disclaimer: There may be missing packages and the SLURM scripts may need to be adjusted.
-    - Install requirements 
-        ```
-        pip install -r requirements.txt
-        ```
 
 2. **Install Dependencies**
    - Install required packages:

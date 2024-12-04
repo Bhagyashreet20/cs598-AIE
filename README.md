@@ -82,10 +82,18 @@ This repository contains scripts and configurations for running various experime
   ```bash
   sbatch GPUtransfer-basic.slurm
 
-### Experiment 4: T5 training with GPU checkpointing
-- **Objective**:  This experiment focuses on optimizing training processes by caching intermediate results on GPUs and efficiently managing checkpoints.
+### Experiment 4A: T5 training with GPU checkpointing
+- **Objective**:  This experiment focuses on optimizing training processes by caching results on GPUs and efficiently managing checkpoints.
 - **Script**: `code/cs598-AIE/train_t5.slurm`
 - **Output**: `code/cs598-AIE/experiment4.out`
 - **Run Command**:
   ```bash
   sbatch train_t5.slurm
+
+### Experiment 4B: T5 training with GPU checkpointing
+- **Objective**:  This experiment focuses on optimizing training processes by caching checkpoints on GPUs across nodes.
+- **Script**: `code/cs598-AIE/two_nodes/train_t5_two_nodes0.slurm and code/cs598-AIE/two_nodes/train_t5_two_nodes1.slurm`
+- **Output**: `code/cs598-AIE/two_nodes/t5_node0.5719534.out and code/cs598-AIE/two_nodes/t5_node0.5719535.out`
+- **Run Command**:
+  ```bash
+  sbatch two_nodes/train_t5_two_nodes0.slurm

@@ -74,7 +74,7 @@ This repository contains scripts and configurations for running various experime
   sbatch accelerate_variants/summarization.slurm
 
 
-### Experiment 3: GPU to GPU transfer 
+### Experiment 3: GPU to GPU transfer for LLAMA 3.2 3B
 - **Objective**:  Test GPU-to-GPU data transfer to improve performance for asnyc checkpointing.
 - **Script**: `code/cs598-AIE/GPUtransfer-basic.slurm`
 - **Output**: `code/cs598-AIE/experiment3.out`
@@ -83,7 +83,7 @@ This repository contains scripts and configurations for running various experime
   sbatch GPUtransfer-basic.slurm
 
 ### Experiment 4A: T5 training with GPU checkpointing
-- **Objective**:  This experiment focuses on optimizing training processes by caching results on GPUs and efficiently managing checkpoints.
+- **Objective**:  This experiment focuses on optimizing training processes by caching heckpoints on GPUs within the same node.
 - **Script**: `code/cs598-AIE/train_t5.slurm`
 - **Output**: `code/cs598-AIE/experiment4.out`
 - **Run Command**:
